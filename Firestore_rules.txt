@@ -2,12 +2,16 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{uid} {
-      allow read: if true;
+      allow get: if true;
+      allow list: if resource.data.listed == true;
       allow write: if request.auth != null
         && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['name'])
+        && request.resource.data.keys().hasOnly(['name','listed'])
         && request.resource.data.name is string
-        && request.resource.data.name.size() <= 20;
+        && request.resource.data.name.size() >= 1
+        && request.resource.data.name.size() <= 20
+        && (!('listed' in request.resource.data)
+            || request.resource.data.listed is bool);
     }
     match /users/{uid}/months/{month} {
       allow read: if true;
