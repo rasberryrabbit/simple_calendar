@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>공유 캘린더</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#faf9fc;--card:#fff;--ink:#26233a;--mute:#8a869b;--line:#e3e0ec;--head:#ddd4ea;--accent:#5b3fa0;
+--sat:#2f6fd0;--sun:#d9484f;--off:#e2e1e6;--plan:#d8ecd8;--show:#fff0c8;--etc:#dbe8fb;--dim:#f1f0f5}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17151f;--card:#201e2b;--ink:#ece9f6;--mute:#9591a8;--line:#363349;--head:#3a3158;--accent:#b9a3f0;--sat:#7fa8f0;--sun:#f08a90;--off:#383643;--plan:#2f4a33;--show:#54492a;--etc:#2c3f5c;--dim:#1a1824}}
+:root[data-theme="dark"]{--bg:#17151f;--card:#201e2b;--ink:#ece9f6;--mute:#9591a8;--line:#363349;--head:#3a3158;--accent:#b9a3f0;--sat:#7fa8f0;--sun:#f08a90;--off:#383643;--plan:#2f4a33;--show:#54492a;--etc:#2c3f5c;--dim:#1a1824}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 "Pretendard","Noto Sans KR",system-ui,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:12px}
+header{display:flex;align-items:center;gap:8px;background:var(--head);border-radius:12px;padding:10px 14px;margin-bottom:10px}
+header h1{flex:1;margin:0;font-size:20px;color:var(--accent);text-align:center}
+button{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+.grid{display:grid;grid-template-columns:repeat(7,minmax(92px,1fr));min-width:644px}
+.dow{padding:7px 0;text-align:center;font-weight:600;background:var(--dim);border-bottom:1px solid var(--line)}
+.dow.sat,.n.sat{color:var(--sat)}.dow.sun,.n.sun{color:var(--sun)}
+.cell{min-height:104px;padding:5px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);cursor:pointer;display:flex;flex-direction:column;gap:3px}
+.cell:nth-child(7n){border-right:0}
+.cell.out{background:var(--dim);cursor:default;opacity:.55}
+.cell:not(.out):hover{background:var(--dim)}
+.n{font-weight:700;font-size:13px}
+.today .n{background:var(--accent);color:#fff;border-radius:10px;padding:0 7px;align-self:flex-start}
+.cell.rest,.cell.rest:hover{background:repeating-linear-gradient(135deg,var(--off) 0 8px,transparent 8px 16px),var(--off)}
+.cell.rest .ev{background:transparent;font-weight:700}
+.ev{border-radius:6px;padding:4px 6px;font-size:12.5px;text-align:center;word-break:keep-all;overflow-wrap:anywhere}
+.ev.off{background:var(--off)}.ev.plan{background:var(--plan)}.ev.show{background:var(--show)}.ev.etc{background:var(--etc)}
+.status{margin:8px 2px;color:var(--mute);font-size:12px}
+.modal{position:fixed;inset:0;background:#0007;display:none;align-items:center;justify-content:center;padding:16px;z-index:9}
+.modal.on{display:flex}
+.box{background:var(--card);border-radius:14px;padding:16px;width:100%;max-width:440px;max-height:85vh;overflow:auto}
+.box h2{margin:0 0 10px;font-size:17px}
+.row{display:flex;gap:6px;margin-bottom:6px}
+.row input,.row select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+.row input{flex:1;min-width:0}
+.acts{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <button id="prev" aria-label="이전 달">‹</button>
+    <h1 id="title"></h1>
+    <button id="next" aria-label="다음 달">›</button>
+    <button id="today">오늘</button>
+    <button id="login">로그인</button>
+  </header>
+  <div class="scroll"><div class="grid" id="grid"></div></div>
+  <div class="status" id="status"></div>
+</div>
+<div class="modal" id="modal"><div class="box">
+  <h2 id="mtitle"></h2>
+  <div id="rows"></div>
+  <button id="add">+ 일정 추가</button>
+  <div class="acts"><button id="cancel">닫기</button><button class="pri" id="save">저장</button></div>
+</div></div>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getFirestore,doc,onSnapshot,setDoc} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+/* ▼▼▼ Firebase 콘솔 > 프로젝트 설정 > 내 앱(웹)의 설정값으로 교체하세요 ▼▼▼ */
+const firebaseConfig = {
+  apiKey: "AIzaSyB5Djj8sw_P6P07KMHnWefdkJ14DJ7sskg",
+  authDomain: "calendar-1-ecf45.firebaseapp.com",
+  projectId: "calendar-1-ecf45",
+  storageBucket: "calendar-1-ecf45.firebasestorage.app",
+  messagingSenderId: "328951865340",
+  appId: "1:328951865340:web:5aac388de4d7895aa91c79"
+};
+/* ▲▲▲ */
+
+const TYPES={off:"휴방",plan:"일정",show:"공연·극장",etc:"기타"};
+const DOW=["월","화","수","목","금","토","일"];
+const configured=!firebaseConfig.apiKey.startsWith("YOUR_");
+let db=null,auth=null,user=null,unsub=null,y,m,data={},editing=null,work=[];
+const now=new Date();y=now.getFullYear();m=now.getMonth();
+const $=id=>document.getElementById(id);
+const kind=(t,c)=>/휴식|휴방/.test(t)?"off":(c==="off"||c==="show"?"plan":(c||"plan"));
+const pad=n=>String(n).padStart(2,"0");
+const mkey=()=>y+"-"+pad(m+1);
+const dkey=d=>mkey()+"-"+pad(d);
+const canWrite=()=>!configured||!!user;
+
+if(configured){
+  const app=initializeApp(firebaseConfig);
+  db=getFirestore(app);auth=getAuth(app);
+  onAuthStateChanged(auth,u=>{user=u;$("login").textContent=u?"로그아웃":"로그인";render()});
+}else{$("login").style.display="none"}
+
+function setStatus(t){$("status").textContent=t}
+function subscribe(){
+  if(unsub){unsub();unsub=null}
+  data={};
+  if(!db){render();return}
+  unsub=onSnapshot(doc(db,"months",mkey()),
+    s=>{data=(s.exists()&&s.data().events)||{};render()},
+    e=>setStatus("불러오기 실패: "+e.code));
+}
+function render(){
+  $("title").textContent=y+"년 "+(m+1)+"월";
+  const g=$("grid");g.innerHTML="";
+  DOW.forEach((d,i)=>{const e=document.createElement("div");e.className="dow"+(i==5?" sat":i==6?" sun":"");e.textContent=d;g.appendChild(e)});
+  const off=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate(),prevDays=new Date(y,m,0).getDate();
+  const rows=Math.ceil((off+days)/7),t=new Date();
+  for(let i=0;i<rows*7;i++){
+    const c=document.createElement("div"),col=i%7,d=i-off+1;
+    const n=document.createElement("div");n.className="n"+(col==5?" sat":col==6?" sun":"");
+    if(d<1||d>days){c.className="cell out";n.textContent=d<1?prevDays+d:d-days;c.appendChild(n)}
+    else{
+      c.className="cell"+(t.getFullYear()==y&&t.getMonth()==m&&t.getDate()==d?" today":"");
+      n.textContent=d;c.appendChild(n);
+      (data[dkey(d)]||[]).forEach(ev=>{const e=document.createElement("div");const k=kind(ev.t,ev.c);e.className="ev "+k;if(k==="off")c.classList.add("rest");e.textContent=ev.t;c.appendChild(e)});
+      c.onclick=()=>openDay(d);
+    }
+    g.appendChild(c);
+  }
+  if(!configured)setStatus("Firebase 설정 전이라 저장되지 않는 미리보기 상태입니다.");
+  else if(!user)setStatus("누구나 볼 수 있어요. 수정하려면 오른쪽 위에서 로그인하세요.");
+  else setStatus(user.email+" 로 로그인됨. 날짜를 눌러 일정을 추가·수정하세요.");
+}
+function openDay(d){
+  editing=d;work=(data[dkey(d)]||[]).map(x=>({...x}));
+  $("mtitle").textContent=y+"년 "+(m+1)+"월 "+d+"일";
+  drawRows();
+  $("add").style.display=$("save").style.display=canWrite()?"":"none";
+  $("modal").classList.add("on");
+}
+function drawRows(){
+  const r=$("rows");r.innerHTML="";
+  if(!work.length){const p=document.createElement("div");p.className="status";p.textContent="일정이 없습니다.";r.appendChild(p)}
+  work.forEach((ev,i)=>{
+    const row=document.createElement("div");row.className="row";
+    const inp=document.createElement("input");inp.value=ev.t;inp.disabled=!canWrite();inp.placeholder="내용";
+    inp.oninput=()=>ev.t=inp.value;
+    row.append(inp);
+    if(canWrite()){const x=document.createElement("button");x.textContent="✕";x.setAttribute("aria-label","삭제");x.onclick=()=>{work.splice(i,1);drawRows()};row.appendChild(x)}
+    r.appendChild(row);
+  });
+}
+$("add").onclick=()=>{work.push({id:Math.random().toString(36).slice(2,9),t:"",c:"plan"});drawRows();const i=$("rows").querySelectorAll("input");i[i.length-1].focus()};
+$("cancel").onclick=()=>$("modal").classList.remove("on");
+$("modal").onclick=e=>{if(e.target===$("modal"))$("modal").classList.remove("on")};
+$("save").onclick=async()=>{
+  const list=work.filter(x=>x.t.trim()).map(x=>({id:x.id,t:x.t.trim(),c:kind(x.t,x.c)}));
+  const ev={...data};
+  if(list.length)ev[dkey(editing)]=list;else delete ev[dkey(editing)];
+  $("modal").classList.remove("on");
+  if(!db){data=ev;render();return}
+  try{await setDoc(doc(db,"months",mkey()),{events:ev})}
+  catch(e){setStatus(e.code==="permission-denied"?"저장 권한이 없는 계정입니다.":"저장 실패: "+e.code)}
+};
+$("login").onclick=async()=>{
+  try{user?await signOut(auth):await signInWithPopup(auth,new GoogleAuthProvider())}
+  catch(e){setStatus("로그인 실패: "+e.code)}
+};
+function go(dm){m+=dm;if(m<0){m=11;y--}if(m>11){m=0;y++}subscribe()}
+$("prev").onclick=()=>go(-1);$("next").onclick=()=>go(1);
+$("today").onclick=()=>{y=now.getFullYear();m=now.getMonth();subscribe()};
+render();subscribe();
+</script>
+</body>
+</html>
