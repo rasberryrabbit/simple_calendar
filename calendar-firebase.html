@@ -95,7 +95,6 @@ const firebaseConfig = {
   messagingSenderId: "328951865340",
   appId: "1:328951865340:web:5aac388de4d7895aa91c79"
 };
-
 /* ▲▲▲ */
 
 const TYPES={off:"휴방",plan:"일정",show:"공연·극장",etc:"기타"};
@@ -106,7 +105,7 @@ const now=new Date();y=now.getFullYear();m=now.getMonth();
 const $=id=>document.getElementById(id);
 const kind=(t,c)=>/휴식|휴방/.test(t)?"off":(c==="off"||c==="show"?"plan":(c||"plan"));
 /* ▼ 출시 일정을 편집할 관리자 UID를 넣으세요 (로그인 후 '링크 복사' 주소의 ?u= 뒤 값) */
-const ADMIN_UIDS=[];
+const ADMIN_UIDS=['HidZYZcXBtfgR31GQijZJ6eJvF62'];
 const isAdmin=()=>!!user&&ADMIN_UIDS.includes(user.uid);
 const BTYPES={game:"게임",event:"이벤트",gear:"장비"};
 const BICON={game:"🎮",event:"🎉",gear:"🖥️"};
@@ -177,9 +176,11 @@ function render(){
       const bl=showBase?(baseData[dkey(d)]||[]):[];
       if(bl.length){
         c.classList.add("hasbase");
-        const b=document.createElement("div");b.className="base";
-        b.textContent=(BICON[bl[0].c]||"")+" "+bl[0].t+(bl.length>1?" +"+(bl.length-1):"");
-        c.appendChild(b);
+        bl.forEach(x=>{
+          const b=document.createElement("div");b.className="base";
+          b.textContent=(BICON[x.c]||"")+" "+x.t;
+          c.appendChild(b);
+        });
       }
       (data[dkey(d)]||[]).forEach(ev=>{const e=document.createElement("div");const k=kind(ev.t,ev.c);e.className="ev "+k;if(k==="off")c.classList.add("rest");e.textContent=ev.t;c.appendChild(e)});
       c.onclick=()=>openDay(d);

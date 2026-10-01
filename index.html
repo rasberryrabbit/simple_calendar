@@ -95,7 +95,6 @@ const firebaseConfig = {
   messagingSenderId: "328951865340",
   appId: "1:328951865340:web:5aac388de4d7895aa91c79"
 };
-
 /* ▲▲▲ */
 
 const TYPES={off:"휴방",plan:"일정",show:"공연·극장",etc:"기타"};
@@ -177,9 +176,11 @@ function render(){
       const bl=showBase?(baseData[dkey(d)]||[]):[];
       if(bl.length){
         c.classList.add("hasbase");
-        const b=document.createElement("div");b.className="base";
-        b.textContent=(BICON[bl[0].c]||"")+" "+bl[0].t+(bl.length>1?" +"+(bl.length-1):"");
-        c.appendChild(b);
+        bl.forEach(x=>{
+          const b=document.createElement("div");b.className="base";
+          b.textContent=(BICON[x.c]||"")+" "+x.t;
+          c.appendChild(b);
+        });
       }
       (data[dkey(d)]||[]).forEach(ev=>{const e=document.createElement("div");const k=kind(ev.t,ev.c);e.className="ev "+k;if(k==="off")c.classList.add("rest");e.textContent=ev.t;c.appendChild(e)});
       c.onclick=()=>openDay(d);
