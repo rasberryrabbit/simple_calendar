@@ -18,7 +18,9 @@ button:hover{border-color:var(--accent)}
 button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
 .owner{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 2px 8px;font-size:13px;color:var(--mute)}
 .owner b{color:var(--ink);font-size:15px}
-.owner label{cursor:pointer;margin-left:auto}
+#bwrap{cursor:pointer;margin-left:auto}
+.legend{display:flex;flex-wrap:wrap;gap:14px;margin:0 2px 8px;font-size:13px}
+.legend label{cursor:pointer}
 .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--card)}
 .grid{display:grid;grid-template-columns:repeat(7,minmax(92px,1fr));min-width:644px}
 .dow{padding:7px 0;text-align:center;font-weight:600;background:var(--dim);border-bottom:1px solid var(--line)}
@@ -31,6 +33,7 @@ button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
 .today .n{background:var(--accent);color:#fff;border-radius:10px;padding:0 7px;align-self:flex-start}
 .cell.hasbase{background:var(--base)}
 .base{font-size:11px;line-height:1.3;color:var(--mute);text-align:left;word-break:keep-all;overflow-wrap:anywhere}
+.multi .ev.off{background:repeating-linear-gradient(135deg,var(--off) 0 6px,transparent 6px 12px),var(--off)}
 .cell.rest,.cell.rest:hover{background:repeating-linear-gradient(135deg,var(--off) 0 8px,transparent 8px 16px),var(--off)}
 .cell.rest .ev{background:transparent;font-weight:700}
 .ev{border-radius:6px;padding:4px 6px;font-size:12.5px;text-align:center;word-break:keep-all;overflow-wrap:anywhere}
@@ -58,8 +61,9 @@ body.dragging .drop{border-color:var(--accent);color:var(--accent)}
     <button id="open" class="pri">백업 파일 열기</button>
     <input type="file" id="fi" accept=".json,application/json" multiple hidden>
   </header>
-  <div class="drop" id="drop">백업 JSON 파일(<code>calendar-backup-*.json</code>, <code>calendar-expired-*.json</code>)을 여기로 끌어다 놓거나 위의 <b>백업 파일 열기</b>를 눌러 주세요. 여러 파일을 한꺼번에 열면 합쳐서 보여요. 파일은 이 컴퓨터 안에서만 읽고 어디로도 전송하지 않아요.</div>
+  <div class="drop" id="drop">백업 JSON 파일(<code>calendar-backup-*.json</code>, <code>calendar-expired-*.json</code>)을 여기로 끌어다 놓거나 위의 <b>백업 파일 열기</b>를 눌러 주세요. 다른 사람의 백업을 함께 열면 캘린더를 겹쳐서 보여요. 파일은 이 컴퓨터 안에서만 읽고 어디로도 전송하지 않아요.</div>
   <div class="owner"><span id="info"></span><button id="reset" style="display:none">비우기</button><label id="bwrap"><input type="checkbox" id="sbase" checked> 출시일 표시</label></div>
+  <div class="legend" id="legend"></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
 </div>
@@ -74,9 +78,10 @@ const $=id=>document.getElementById(id);
 const pad=n=>String(n).padStart(2,"0");
 const DOW=["월","화","수","목","금","토","일"];
 const BICON={game:"🎮",event:"🎉",gear:"🖥️"};
+const PALETTE=["#5b3fa0","#d9484f","#2f9e6e","#e08a1e","#2f6fd0","#c2449b","#6b7a8c","#0e9aa7"];
 const kind=(t,c)=>/휴식|휴방/.test(t)?"off":(c==="off"||c==="show"?"plan":(c||"plan"));
 const now=new Date();
-let y=now.getFullYear(),m=now.getMonth(),mine={},base={},files=[],names=[],showBase=true;
+let y=now.getFullYear(),m=now.getMonth(),base={},sources=[],files=[],showBase=true;
 const mkey=()=>y+"-"+pad(m+1);
 const dkey=d=>mkey()+"-"+pad(d);
 
@@ -90,12 +95,21 @@ function merge(t,ev){
     });
   }
 }
-function ingest(obj){
+/* 같은 사용자(uid)의 파일은 한 캘린더로 합치고, 다른 사용자의 파일은 별도 캘린더로 겹쳐서 보여줘요.
+   출시 일정(base)은 모두에게 공통이라 중복 없이 한 번만 보여줘요. */
+function ingest(obj,fname){
   let n=0;
-  if(obj&&obj.months)for(const v of Object.values(obj.months)){merge(mine,v&&v.events);n++}
-  if(obj&&obj.base)for(const v of Object.values(obj.base)){merge(base,v&&v.events);n++}
-  if(obj&&Array.isArray(obj.expired))obj.expired.forEach(x=>{if(!x)return;merge(x.kind==="base"?base:mine,x.events);n++});
-  if(obj&&obj.name&&!names.includes(obj.name))names.push(obj.name);
+  if(!obj||typeof obj!=="object")return 0;
+  if(obj.months||Array.isArray(obj.expired)){
+    const key=obj.uid||fname;
+    let src=sources.find(s=>s.key===key);
+    if(!src){src={key,name:"",mine:{},on:true,color:PALETTE[sources.length%PALETTE.length]};sources.push(src)}
+    if(obj.name)src.name=obj.name+"님";
+    else if(!src.name)src.name=obj.uid?"사용자 "+obj.uid.slice(0,4):fname.replace(/\.json$/i,"");
+    if(obj.months)for(const v of Object.values(obj.months)){merge(src.mine,v&&v.events);n++}
+    if(Array.isArray(obj.expired))obj.expired.forEach(x=>{if(!x)return;merge(x.kind==="base"?base:src.mine,x.events);n++});
+  }
+  if(obj.base)for(const v of Object.values(obj.base)){merge(base,v&&v.events);n++}
   return n;
 }
 async function loadFiles(list){
@@ -103,7 +117,7 @@ async function loadFiles(list){
   for(const f of list){
     try{
       const obj=JSON.parse(await f.text());
-      if(!ingest(obj))throw new Error("일정 데이터가 없어요");
+      if(!ingest(obj,f.name))throw new Error("일정 데이터가 없어요");
       files.push(f.name);
     }catch(e){errs.push(f.name+": "+(e.message||"읽을 수 없어요"))}
   }
@@ -113,11 +127,11 @@ async function loadFiles(list){
   $("status").textContent=errs.length?"열지 못한 파일 — "+errs.join(" / "):"";
 }
 function monthsWithData(){
-  const s=new Set();
-  [mine,base].forEach(t=>Object.keys(t).forEach(d=>{if(t[d].length&&/^\d{4}-\d{2}-\d{2}$/.test(d))s.add(d.slice(0,7))}));
-  return [...s].sort();
+  const set=new Set();
+  [base,...sources.map(s=>s.mine)].forEach(t=>Object.keys(t).forEach(d=>{if(t[d].length&&/^\d{4}-\d{2}-\d{2}$/.test(d))set.add(d.slice(0,7))}));
+  return [...set].sort();
 }
-function count(t){return Object.values(t).reduce((a,l)=>a+l.length,0)}
+const count=t=>Object.values(t).reduce((a,l)=>a+l.length,0);
 function refresh(){
   const ms=monthsWithData(),sel=$("msel");
   sel.innerHTML="";
@@ -126,15 +140,23 @@ function refresh(){
   $("reset").style.display=files.length?"":"none";
   $("drop").style.display=files.length?"none":"";
   $("info").innerHTML=files.length
-    ?"<b>"+(names.length?names.join(", ")+"님의 캘린더":"백업 캘린더")+"</b> · 파일 "+files.length+"개 · 개인 일정 "+count(mine)+"건 · 출시 일정 "+count(base)+"건 · 읽기 전용"
+    ?"<b>캘린더 "+sources.length+"개</b> · 파일 "+files.length+"개 · 개인 일정 "+sources.reduce((a,s)=>a+count(s.mine),0)+"건 · 출시 일정 "+count(base)+"건 · 읽기 전용"
     :"불러온 백업이 없어요.";
+  const lg=$("legend");lg.innerHTML="";
+  sources.forEach(s=>{
+    const l=document.createElement("label"),cb=document.createElement("input"),dot=document.createElement("span");
+    cb.type="checkbox";cb.checked=s.on;cb.onchange=()=>{s.on=cb.checked;render()};
+    dot.textContent="●";dot.style.color=s.color;
+    l.append(cb," ",dot," "+s.name);lg.appendChild(l);
+  });
   render();
 }
 function render(){
   $("title").textContent=y+"년 "+(m+1)+"월";
   const k=mkey(),sel=$("msel");
   if([...sel.options].some(o=>o.value===k))sel.value=k;else sel.selectedIndex=-1;
-  const g=$("grid");g.innerHTML="";
+  const vis=sources.filter(s=>s.on),multi=sources.length>1;
+  const g=$("grid");g.innerHTML="";g.classList.toggle("multi",multi);
   DOW.forEach((d,i)=>{const e=document.createElement("div");e.className="dow"+(i==5?" sat":i==6?" sun":"");e.textContent=d;g.appendChild(e)});
   const off=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate(),prevDays=new Date(y,m,0).getDate();
   const rows=Math.ceil((off+days)/7),t=new Date();
@@ -150,12 +172,13 @@ function render(){
         c.classList.add("hasbase");
         bl.forEach(x=>{const b=document.createElement("div");b.className="base";b.textContent=(BICON[x.c]||"")+" "+x.t;c.appendChild(b)});
       }
-      (mine[dkey(d)]||[]).forEach(ev=>{
-        const e=document.createElement("div"),kd=kind(ev.t,ev.c);
-        e.className="ev "+kd;e.textContent=ev.t;
-        if(kd==="off")c.classList.add("rest");
+      vis.forEach(s=>(s.mine[dkey(d)]||[]).forEach(x=>{
+        const e=document.createElement("div"),kd=kind(x.t,x.c);
+        e.className="ev "+kd;e.textContent=x.t;
+        if(multi){e.style.borderLeft="4px solid "+s.color;e.title=s.name}
+        if(kd==="off"&&vis.length===1)c.classList.add("rest");
         c.appendChild(e);
-      });
+      }));
       c.onclick=()=>openDay(d);
     }
     g.appendChild(c);
@@ -163,16 +186,24 @@ function render(){
 }
 function openDay(d){
   $("mtitle").textContent=y+"년 "+(m+1)+"월 "+d+"일";
-  const fill=(box,title,list,icon)=>{
-    box.innerHTML="";
+  const b=base[dkey(d)]||[];
+  const bs=$("bsec");bs.innerHTML="";
+  if(b.length){
+    const h=document.createElement("div");h.className="sub";h.textContent="출시 일정";bs.appendChild(h);
+    b.forEach(x=>{const r=document.createElement("div");r.className="item";r.textContent=(BICON[x.c]||"")+" "+x.t;bs.appendChild(r)});
+  }
+  const ps=$("psec");ps.innerHTML="";
+  let any=b.length>0;
+  sources.filter(s=>s.on).forEach(s=>{
+    const list=s.mine[dkey(d)]||[];
     if(!list.length)return;
-    const h=document.createElement("div");h.className="sub";h.textContent=title;box.appendChild(h);
-    list.forEach(x=>{const r=document.createElement("div");r.className="item";r.textContent=(icon?(BICON[x.c]||"")+" ":"")+x.t;box.appendChild(r)});
-  };
-  const b=base[dkey(d)]||[],p=mine[dkey(d)]||[];
-  fill($("bsec"),"출시 일정",b,true);
-  fill($("psec"),"내 일정",p,false);
-  if(!b.length&&!p.length){$("psec").innerHTML='<div class="sub">이 날은 일정이 없어요.</div>'}
+    any=true;
+    const h=document.createElement("div");h.className="sub";
+    const dot=document.createElement("span");dot.textContent="●";dot.style.color=s.color;
+    h.append(dot," "+s.name+"의 일정");ps.appendChild(h);
+    list.forEach(x=>{const r=document.createElement("div");r.className="item";r.textContent=x.t;ps.appendChild(r)});
+  });
+  if(!any)ps.innerHTML='<div class="sub">이 날은 일정이 없어요.</div>';
   $("modal").classList.add("on");
 }
 function go(dm){m+=dm;if(m<0){m=11;y--}if(m>11){m=0;y++}render()}
@@ -181,7 +212,7 @@ $("today").onclick=()=>{y=now.getFullYear();m=now.getMonth();render()};
 $("msel").onchange=()=>{const k=$("msel").value;y=+k.slice(0,4);m=+k.slice(5)-1;render()};
 $("open").onclick=()=>$("fi").click();
 $("fi").onchange=async e=>{await loadFiles([...e.target.files]);e.target.value=""};
-$("reset").onclick=()=>{mine={};base={};files=[];names=[];$("status").textContent="";refresh()};
+$("reset").onclick=()=>{base={};sources=[];files=[];$("status").textContent="";refresh()};
 $("sbase").onchange=()=>{showBase=$("sbase").checked;render()};
 $("close").onclick=()=>$("modal").classList.remove("on");
 $("modal").onclick=e=>{if(e.target===$("modal"))$("modal").classList.remove("on")};
