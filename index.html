@@ -62,11 +62,12 @@ button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
     <button id="mine" style="display:none">내 캘린더</button>
   </header>
   <div class="owner"><span id="oname"></span><button id="rename" style="display:none">이름 설정</button>
+    <button id="export" style="display:none">일정 내려받기</button>
     <label id="lwrap" style="display:none"><input type="checkbox" id="listed"> 다른 사람이 찾을 수 있게 노출</label>
     <label id="bwrap" style="margin-left:auto"><input type="checkbox" id="sbase"> 출시일 표시</label></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v5)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v8)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -84,7 +85,7 @@ button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
 </div></div>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {getFirestore,doc,onSnapshot,setDoc,collection,query,where,limit,getDocs} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getFirestore,doc,onSnapshot,setDoc,collection,query,where,limit,getDocs,deleteDoc,Timestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 /* ▼▼▼ Firebase 콘솔 > 프로젝트 설정 > 내 앱(웹)의 설정값으로 교체하세요 ▼▼▼ */
@@ -101,7 +102,7 @@ const firebaseConfig = {
 const TYPES={off:"휴방",plan:"일정",show:"공연·극장",etc:"기타"};
 const DOW=["월","화","수","목","금","토","일"];
 const configured=!firebaseConfig.apiKey.startsWith("YOUR_");
-let db=null,auth=null,user=null,pUnsub=null,pname="",plisted=false,bUnsub=null,baseWork=[],baseData={},showBase=true,unsub=null,y,m,data={},editing=null,work=[];
+let db=null,auth=null,user=null,cleaned=false,pUnsub=null,pname="",plisted=false,bUnsub=null,baseWork=[],baseData={},showBase=true,unsub=null,y,m,data={},editing=null,work=[];
 const now=new Date();y=now.getFullYear();m=now.getMonth();
 const $=id=>document.getElementById(id);
 const kind=(t,c)=>/휴식|휴방/.test(t)?"off":(c==="off"||c==="show"?"plan":(c||"plan"));
@@ -110,6 +111,7 @@ const ADMIN_UIDS=['HidZYZcXBtfgR31GQijZJ6eJvF62'];
 const isAdmin=()=>!!user&&ADMIN_UIDS.includes(user.uid);
 const BTYPES={game:"게임",event:"이벤트",gear:"장비"};
 const BICON={game:"🎮",event:"🎉",gear:"🖥️"};
+const expTs=()=>Timestamp.fromDate(new Date(y+3,m+1,1)); // 해당 월이 끝나고 3년 뒤 만료
 const rid=()=>Math.random().toString(36).slice(2,9);
 const pad=n=>String(n).padStart(2,"0");
 const mkey=()=>y+"-"+pad(m+1);
@@ -121,7 +123,7 @@ const canWrite=()=>!configured||(!!user&&target()===user.uid);
 if(configured){
   const app=initializeApp(firebaseConfig);
   db=getFirestore(app);auth=getAuth(app);
-  onAuthStateChanged(auth,u=>{user=u;$("login").textContent=u?"로그아웃":"로그인";updateBtns();subscribe();subProfile()});
+  onAuthStateChanged(auth,u=>{user=u;$("login").textContent=u?"로그아웃":"로그인";if(!u)cleaned=false;updateBtns();subscribe();subProfile();cleanup()});
 }else{$("login").style.display="none";$("find").style.display="none";$("bwrap").style.display="none"}
 
 function updateBtns(){
@@ -141,6 +143,7 @@ function renderOwner(){
   $("rename").style.display=mine?"":"none";
   $("rename").textContent=pname?"이름 변경":"이름 설정";
   $("lwrap").style.display=mine?"":"none";
+  $("export").style.display=mine?"":"none";
   $("listed").checked=plisted;
 }
 function setStatus(t){$("status").textContent=t}
@@ -248,13 +251,13 @@ $("save").onclick=async()=>{
       const list=work.filter(x=>x.t.trim()).map(x=>({id:x.id,t:x.t.trim(),c:kind(x.t,x.c)}));
       const ev={...data};
       if(list.length)ev[dkey(d)]=list;else delete ev[dkey(d)];
-      if(!db){data=ev;render()}else await setDoc(doc(db,"users",user.uid,"months",mk),{events:ev});
+      if(!db){data=ev;render()}else await setDoc(doc(db,"users",user.uid,"months",mk),{events:ev,expireAt:expTs()});
     }
     if(db&&isAdmin()){
       const bl=baseWork.filter(x=>x.t.trim()).map(x=>({id:x.id,t:x.t.trim(),c:x.c}));
       const bev={...baseData};
       if(bl.length)bev[dkey(d)]=bl;else delete bev[dkey(d)];
-      await setDoc(doc(db,"base",mk),{events:bev});
+      await setDoc(doc(db,"base",mk),{events:bev,expireAt:expTs()});
     }
   }catch(e){setStatus(e.code==="permission-denied"?"저장 권한이 없는 계정입니다.":"저장 실패: "+(e.code||"오류"))}
 };
@@ -305,6 +308,50 @@ $("fgo").onclick=findCals;
 $("fq").onkeydown=e=>{if(e.key==="Enter")findCals()};
 $("fclose").onclick=()=>$("fmodal").classList.remove("on");
 $("fmodal").onclick=e=>{if(e.target===$("fmodal"))$("fmodal").classList.remove("on")};
+function saveJson(obj,prefix){
+  const blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=prefix+new Date().toISOString().slice(0,10)+".json";
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+const EXP_YEARS=3;
+const isExpired=id=>{const m=/^(\d{4})-(\d{2})$/.exec(id);return !!m&&new Date(+m[1]+EXP_YEARS,+m[2],1)<=new Date()};
+async function cleanup(){
+  if(!db||!user||cleaned)return;
+  if(viewUid&&viewUid!==user.uid)return;
+  cleaned=true;
+  try{
+    const items=[];
+    const own=await getDocs(collection(db,"users",user.uid,"months"));
+    own.forEach(d=>{if(isExpired(d.id))items.push({kind:"months",id:d.id,events:d.data().events||{},path:["users",user.uid,"months",d.id]})});
+    if(isAdmin()){
+      const b=await getDocs(collection(db,"base"));
+      b.forEach(d=>{if(isExpired(d.id))items.push({kind:"base",id:d.id,events:d.data().events||{},path:["base",d.id]})});
+    }
+    if(!items.length)return;
+    if(!confirm("3년이 지난 일정이 "+items.length+"개월분 있어요.\n백업 파일을 내려받은 뒤 삭제할까요?\n(취소하면 삭제하지 않아요)"))return;
+    saveJson({exportedAt:new Date().toISOString(),uid:user.uid,expired:items.map(x=>({kind:x.kind,id:x.id,events:x.events}))},"calendar-expired-");
+    for(const it of items)await deleteDoc(doc(db,...it.path));
+    setStatus(items.length+"개월분의 만료된 일정을 백업하고 삭제했어요.");
+  }catch(e){setStatus("만료 일정 정리 실패: "+(e.code||"오류"))}
+}
+const iso=v=>v&&v.toDate?v.toDate().toISOString():null;
+$("export").onclick=async()=>{
+  try{
+    const out={exportedAt:new Date().toISOString(),uid:user.uid,name:pname,months:{}};
+    const snap=await getDocs(collection(db,"users",user.uid,"months"));
+    snap.forEach(d=>{const x=d.data();out.months[d.id]={events:x.events||{},expireAt:iso(x.expireAt)}});
+    if(isAdmin()){
+      out.base={};
+      const b=await getDocs(collection(db,"base"));
+      b.forEach(d=>{const x=d.data();out.base[d.id]={events:x.events||{},expireAt:iso(x.expireAt)}});
+    }
+    saveJson(out,"calendar-backup-");
+    setStatus("백업 파일을 내려받았어요.");
+  }catch(e){setStatus("내려받기 실패: "+(e.code||"오류"))}
+};
 function go(dm){m+=dm;if(m<0){m=11;y--}if(m>11){m=0;y++}subscribe()}
 $("prev").onclick=()=>go(-1);$("next").onclick=()=>go(1);
 $("today").onclick=()=>{y=now.getFullYear();m=now.getMonth();subscribe()};
