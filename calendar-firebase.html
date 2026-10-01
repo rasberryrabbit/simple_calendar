@@ -67,7 +67,7 @@ button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
     <label id="bwrap" style="margin-left:auto"><input type="checkbox" id="sbase"> 출시일 표시</label></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v8)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v9)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -111,7 +111,7 @@ const ADMIN_UIDS=['HidZYZcXBtfgR31GQijZJ6eJvF62'];
 const isAdmin=()=>!!user&&ADMIN_UIDS.includes(user.uid);
 const BTYPES={game:"게임",event:"이벤트",gear:"장비"};
 const BICON={game:"🎮",event:"🎉",gear:"🖥️"};
-const expTs=()=>Timestamp.fromDate(new Date(y+3,m+1,1)); // 해당 월이 끝나고 3년 뒤 만료
+const expTs=()=>Timestamp.fromDate(new Date(y+EXP_YEARS,m+1,1)); // 해당 월이 끝나고 6년 뒤 만료
 const rid=()=>Math.random().toString(36).slice(2,9);
 const pad=n=>String(n).padStart(2,"0");
 const mkey=()=>y+"-"+pad(m+1);
@@ -316,7 +316,7 @@ function saveJson(obj,prefix){
   document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
-const EXP_YEARS=3;
+const EXP_YEARS=6;
 const isExpired=id=>{const m=/^(\d{4})-(\d{2})$/.exec(id);return !!m&&new Date(+m[1]+EXP_YEARS,+m[2],1)<=new Date()};
 async function cleanup(){
   if(!db||!user||cleaned)return;
@@ -331,7 +331,7 @@ async function cleanup(){
       b.forEach(d=>{if(isExpired(d.id))items.push({kind:"base",id:d.id,events:d.data().events||{},path:["base",d.id]})});
     }
     if(!items.length)return;
-    if(!confirm("3년이 지난 일정이 "+items.length+"개월분 있어요.\n백업 파일을 내려받은 뒤 삭제할까요?\n(취소하면 삭제하지 않아요)"))return;
+    if(!confirm(EXP_YEARS+"년이 지난 일정이 "+items.length+"개월분 있어요.\n백업 파일을 내려받은 뒤 삭제할까요?\n(취소하면 삭제하지 않아요)"))return;
     saveJson({exportedAt:new Date().toISOString(),uid:user.uid,expired:items.map(x=>({kind:x.kind,id:x.id,events:x.events}))},"calendar-expired-");
     for(const it of items)await deleteDoc(doc(db,...it.path));
     setStatus(items.length+"개월분의 만료된 일정을 백업하고 삭제했어요.");
