@@ -29,6 +29,8 @@ button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
 .cell:not(.out):hover{background:var(--dim)}
 .n{font-weight:700;font-size:13px}
 .today .n{background:var(--accent);color:#fff;border-radius:10px;padding:0 7px;align-self:flex-start}
+.cell.rest,.cell.rest:hover{background:repeating-linear-gradient(135deg,var(--off) 0 8px,transparent 8px 16px),var(--off)}
+.cell.rest .ev{background:transparent;font-weight:700}
 .ev{border-radius:6px;padding:4px 6px;font-size:12.5px;text-align:center;word-break:keep-all;overflow-wrap:anywhere}
 .ev.off{background:var(--off)}.ev.plan{background:var(--plan)}.ev.show{background:var(--show)}.ev.etc{background:var(--etc)}
 .status{margin:8px 2px;color:var(--mute);font-size:12px}
@@ -74,7 +76,6 @@ const firebaseConfig = {
   messagingSenderId: "328951865340",
   appId: "1:328951865340:web:5aac388de4d7895aa91c79"
 };
-
 /* ▲▲▲ */
 
 const TYPES={off:"휴방",plan:"일정",show:"공연·극장",etc:"기타"};
@@ -83,6 +84,7 @@ const configured=!firebaseConfig.apiKey.startsWith("YOUR_");
 let db=null,auth=null,user=null,unsub=null,y,m,data={},editing=null,work=[];
 const now=new Date();y=now.getFullYear();m=now.getMonth();
 const $=id=>document.getElementById(id);
+const kind=(t,c)=>/휴식|휴방/.test(t)?"off":(c==="off"||c==="show"?"plan":(c||"plan"));
 const pad=n=>String(n).padStart(2,"0");
 const mkey=()=>y+"-"+pad(m+1);
 const dkey=d=>mkey()+"-"+pad(d);
@@ -116,7 +118,7 @@ function render(){
     else{
       c.className="cell"+(t.getFullYear()==y&&t.getMonth()==m&&t.getDate()==d?" today":"");
       n.textContent=d;c.appendChild(n);
-      (data[dkey(d)]||[]).forEach(ev=>{const e=document.createElement("div");e.className="ev "+(TYPES[ev.c]?ev.c:"etc");e.textContent=ev.t;c.appendChild(e)});
+      (data[dkey(d)]||[]).forEach(ev=>{const e=document.createElement("div");const k=kind(ev.t,ev.c);e.className="ev "+k;if(k==="off")c.classList.add("rest");e.textContent=ev.t;c.appendChild(e)});
       c.onclick=()=>openDay(d);
     }
     g.appendChild(c);
@@ -139,10 +141,7 @@ function drawRows(){
     const row=document.createElement("div");row.className="row";
     const inp=document.createElement("input");inp.value=ev.t;inp.disabled=!canWrite();inp.placeholder="내용";
     inp.oninput=()=>ev.t=inp.value;
-    const sel=document.createElement("select");sel.disabled=!canWrite();
-    Object.entries(TYPES).forEach(([k,v])=>{const o=document.createElement("option");o.value=k;o.textContent=v;if(k==ev.c)o.selected=true;sel.appendChild(o)});
-    sel.onchange=()=>ev.c=sel.value;
-    row.append(inp,sel);
+    row.append(inp);
     if(canWrite()){const x=document.createElement("button");x.textContent="✕";x.setAttribute("aria-label","삭제");x.onclick=()=>{work.splice(i,1);drawRows()};row.appendChild(x)}
     r.appendChild(row);
   });
@@ -151,7 +150,7 @@ $("add").onclick=()=>{work.push({id:Math.random().toString(36).slice(2,9),t:"",c
 $("cancel").onclick=()=>$("modal").classList.remove("on");
 $("modal").onclick=e=>{if(e.target===$("modal"))$("modal").classList.remove("on")};
 $("save").onclick=async()=>{
-  const list=work.filter(x=>x.t.trim()).map(x=>({id:x.id,t:x.t.trim(),c:x.c}));
+  const list=work.filter(x=>x.t.trim()).map(x=>({id:x.id,t:x.t.trim(),c:kind(x.t,x.c)}));
   const ev={...data};
   if(list.length)ev[dkey(editing)]=list;else delete ev[dkey(editing)];
   $("modal").classList.remove("on");
