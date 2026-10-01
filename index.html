@@ -7,9 +7,9 @@
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
 --bg:#faf9fc;--card:#fff;--ink:#26233a;--mute:#8a869b;--line:#e3e0ec;--head:#ddd4ea;--accent:#5b3fa0;
---sat:#2f6fd0;--sun:#d9484f;--off:#e2e1e6;--plan:#d8ecd8;--show:#fff0c8;--etc:#dbe8fb;--dim:#f1f0f5}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17151f;--card:#201e2b;--ink:#ece9f6;--mute:#9591a8;--line:#363349;--head:#3a3158;--accent:#b9a3f0;--sat:#7fa8f0;--sun:#f08a90;--off:#383643;--plan:#2f4a33;--show:#54492a;--etc:#2c3f5c;--dim:#1a1824}}
-:root[data-theme="dark"]{--bg:#17151f;--card:#201e2b;--ink:#ece9f6;--mute:#9591a8;--line:#363349;--head:#3a3158;--accent:#b9a3f0;--sat:#7fa8f0;--sun:#f08a90;--off:#383643;--plan:#2f4a33;--show:#54492a;--etc:#2c3f5c;--dim:#1a1824}
+--sat:#2f6fd0;--sun:#d9484f;--off:#e2e1e6;--plan:#d8ecd8;--show:#fff0c8;--etc:#dbe8fb;--dim:#f1f0f5;--base:#e8f0fb}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17151f;--card:#201e2b;--ink:#ece9f6;--mute:#9591a8;--line:#363349;--head:#3a3158;--accent:#b9a3f0;--sat:#7fa8f0;--sun:#f08a90;--off:#383643;--plan:#2f4a33;--show:#54492a;--etc:#2c3f5c;--dim:#1a1824;--base:#243049}}
+:root[data-theme="dark"]{--bg:#17151f;--card:#201e2b;--ink:#ece9f6;--mute:#9591a8;--line:#363349;--head:#3a3158;--accent:#b9a3f0;--sat:#7fa8f0;--sun:#f08a90;--off:#383643;--plan:#2f4a33;--show:#54492a;--etc:#2c3f5c;--dim:#1a1824;--base:#243049}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 "Pretendard","Noto Sans KR",system-ui,sans-serif}
@@ -29,12 +29,15 @@ button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
 .cell:not(.out):hover{background:var(--dim)}
 .n{font-weight:700;font-size:13px}
 .today .n{background:var(--accent);color:#fff;border-radius:10px;padding:0 7px;align-self:flex-start}
+.cell.hasbase{background:var(--base)}
+.base{font-size:11px;line-height:1.25;color:var(--mute);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cell.rest,.cell.rest:hover{background:repeating-linear-gradient(135deg,var(--off) 0 8px,transparent 8px 16px),var(--off)}
 .cell.rest .ev{background:transparent;font-weight:700}
 .ev{border-radius:6px;padding:4px 6px;font-size:12.5px;text-align:center;word-break:keep-all;overflow-wrap:anywhere}
 .ev.off{background:var(--off)}.ev.plan{background:var(--plan)}.ev.show{background:var(--show)}.ev.etc{background:var(--etc)}
 .owner{display:flex;align-items:center;gap:8px;margin:0 2px 8px;font-weight:700;font-size:16px}
 .owner label{font-weight:400;font-size:13px;color:var(--mute);cursor:pointer}
+.sub{font-size:12px;color:var(--mute);margin:10px 0 6px;font-weight:600}
 .status{margin:8px 2px;color:var(--mute);font-size:12px}
 .modal{position:fixed;inset:0;background:#0007;display:none;align-items:center;justify-content:center;padding:16px;z-index:9}
 .modal.on{display:flex}
@@ -59,12 +62,15 @@ button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
     <button id="mine" style="display:none">내 캘린더</button>
   </header>
   <div class="owner"><span id="oname"></span><button id="rename" style="display:none">이름 설정</button>
-    <label id="lwrap" style="display:none"><input type="checkbox" id="listed"> 다른 사람이 찾을 수 있게 노출</label></div>
+    <label id="lwrap" style="display:none"><input type="checkbox" id="listed"> 다른 사람이 찾을 수 있게 노출</label>
+    <label id="bwrap" style="margin-left:auto"><input type="checkbox" id="sbase"> 출시일 표시</label></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
+  <div id="bsec"></div>
+  <div class="sub" id="psub">내 일정</div>
   <div id="rows"></div>
   <button id="add">+ 일정 추가</button>
   <div class="acts"><button id="cancel">닫기</button><button class="pri" id="save">저장</button></div>
@@ -89,15 +95,22 @@ const firebaseConfig = {
   messagingSenderId: "328951865340",
   appId: "1:328951865340:web:5aac388de4d7895aa91c79"
 };
+
 /* ▲▲▲ */
 
 const TYPES={off:"휴방",plan:"일정",show:"공연·극장",etc:"기타"};
 const DOW=["월","화","수","목","금","토","일"];
 const configured=!firebaseConfig.apiKey.startsWith("YOUR_");
-let db=null,auth=null,user=null,pUnsub=null,pname="",plisted=false,unsub=null,y,m,data={},editing=null,work=[];
+let db=null,auth=null,user=null,pUnsub=null,pname="",plisted=false,bUnsub=null,baseWork=[],baseData={},showBase=true,unsub=null,y,m,data={},editing=null,work=[];
 const now=new Date();y=now.getFullYear();m=now.getMonth();
 const $=id=>document.getElementById(id);
 const kind=(t,c)=>/휴식|휴방/.test(t)?"off":(c==="off"||c==="show"?"plan":(c||"plan"));
+/* ▼ 출시 일정을 편집할 관리자 UID를 넣으세요 (로그인 후 '링크 복사' 주소의 ?u= 뒤 값) */
+const ADMIN_UIDS=['HidZYZcXBtfgR31GQijZJ6eJvF62'];
+const isAdmin=()=>!!user&&ADMIN_UIDS.includes(user.uid);
+const BTYPES={game:"게임",event:"이벤트",gear:"장비"};
+const BICON={game:"🎮",event:"🎉",gear:"🖥️"};
+const rid=()=>Math.random().toString(36).slice(2,9);
 const pad=n=>String(n).padStart(2,"0");
 const mkey=()=>y+"-"+pad(m+1);
 const dkey=d=>mkey()+"-"+pad(d);
@@ -109,7 +122,7 @@ if(configured){
   const app=initializeApp(firebaseConfig);
   db=getFirestore(app);auth=getAuth(app);
   onAuthStateChanged(auth,u=>{user=u;$("login").textContent=u?"로그아웃":"로그인";updateBtns();subscribe();subProfile()});
-}else{$("login").style.display="none";$("find").style.display="none"}
+}else{$("login").style.display="none";$("find").style.display="none";$("bwrap").style.display="none"}
 
 function updateBtns(){
   $("link").style.display=user?"":"none";
@@ -131,7 +144,14 @@ function renderOwner(){
   $("listed").checked=plisted;
 }
 function setStatus(t){$("status").textContent=t}
+function subBase(){
+  if(bUnsub){bUnsub();bUnsub=null}
+  baseData={};
+  if(!db)return;
+  bUnsub=onSnapshot(doc(db,"base",mkey()),s=>{baseData=(s.exists()&&s.data().events)||{};render()},()=>{});
+}
 function subscribe(){
+  subBase();
   if(unsub){unsub();unsub=null}
   data={};
   const t=target();
@@ -154,6 +174,13 @@ function render(){
     else{
       c.className="cell"+(t.getFullYear()==y&&t.getMonth()==m&&t.getDate()==d?" today":"");
       n.textContent=d;c.appendChild(n);
+      const bl=showBase?(baseData[dkey(d)]||[]):[];
+      if(bl.length){
+        c.classList.add("hasbase");
+        const b=document.createElement("div");b.className="base";
+        b.textContent=(BICON[bl[0].c]||"")+" "+bl[0].t+(bl.length>1?" +"+(bl.length-1):"");
+        c.appendChild(b);
+      }
       (data[dkey(d)]||[]).forEach(ev=>{const e=document.createElement("div");const k=kind(ev.t,ev.c);e.className="ev "+k;if(k==="off")c.classList.add("rest");e.textContent=ev.t;c.appendChild(e)});
       c.onclick=()=>openDay(d);
     }
@@ -168,8 +195,33 @@ function openDay(d){
   editing=d;work=(data[dkey(d)]||[]).map(x=>({...x}));
   $("mtitle").textContent=y+"년 "+(m+1)+"월 "+d+"일";
   drawRows();
-  $("add").style.display=$("save").style.display=canWrite()?"":"none";
+  baseWork=(baseData[dkey(d)]||[]).map(x=>({...x}));
+  drawBase();
+  $("add").style.display=canWrite()?"":"none";
+  $("save").style.display=(canWrite()||isAdmin())?"":"none";
   $("modal").classList.add("on");
+}
+function drawBase(){
+  const box=$("bsec");box.innerHTML="";
+  const adm=isAdmin();
+  if(!baseWork.length&&!adm){$("psub").style.display="none";return}
+  $("psub").style.display="";
+  const h=document.createElement("div");h.className="sub";h.textContent="출시 일정";box.appendChild(h);
+  baseWork.forEach((ev,i)=>{
+    const row=document.createElement("div");row.className="row";
+    if(!adm){
+      const t=document.createElement("div");t.textContent=(BICON[ev.c]||"")+" "+ev.t;t.style.padding="4px 2px";row.appendChild(t);
+    }else{
+      const sel=document.createElement("select");
+      Object.entries(BTYPES).forEach(([k,v])=>{const o=document.createElement("option");o.value=k;o.textContent=v;if(k==ev.c)o.selected=true;sel.appendChild(o)});
+      sel.onchange=()=>ev.c=sel.value;
+      const inp=document.createElement("input");inp.value=ev.t;inp.placeholder="출시 일정 내용";inp.oninput=()=>ev.t=inp.value;
+      const x=document.createElement("button");x.textContent="✕";x.setAttribute("aria-label","삭제");x.onclick=()=>{baseWork.splice(i,1);drawBase()};
+      row.append(sel,inp,x);
+    }
+    box.appendChild(row);
+  });
+  if(adm){const a=document.createElement("button");a.textContent="+ 출시 일정 추가";a.onclick=()=>{baseWork.push({id:rid(),t:"",c:"game"});drawBase()};box.appendChild(a)}
 }
 function drawRows(){
   const r=$("rows");r.innerHTML="";
@@ -187,13 +239,22 @@ $("add").onclick=()=>{work.push({id:Math.random().toString(36).slice(2,9),t:"",c
 $("cancel").onclick=()=>$("modal").classList.remove("on");
 $("modal").onclick=e=>{if(e.target===$("modal"))$("modal").classList.remove("on")};
 $("save").onclick=async()=>{
-  const list=work.filter(x=>x.t.trim()).map(x=>({id:x.id,t:x.t.trim(),c:kind(x.t,x.c)}));
-  const ev={...data};
-  if(list.length)ev[dkey(editing)]=list;else delete ev[dkey(editing)];
+  const d=editing,mk=mkey();
   $("modal").classList.remove("on");
-  if(!db){data=ev;render();return}
-  try{await setDoc(doc(db,"users",user.uid,"months",mkey()),{events:ev})}
-  catch(e){setStatus(e.code==="permission-denied"?"저장 권한이 없는 계정입니다.":"저장 실패: "+e.code)}
+  try{
+    if(canWrite()){
+      const list=work.filter(x=>x.t.trim()).map(x=>({id:x.id,t:x.t.trim(),c:kind(x.t,x.c)}));
+      const ev={...data};
+      if(list.length)ev[dkey(d)]=list;else delete ev[dkey(d)];
+      if(!db){data=ev;render()}else await setDoc(doc(db,"users",user.uid,"months",mk),{events:ev});
+    }
+    if(db&&isAdmin()){
+      const bl=baseWork.filter(x=>x.t.trim()).map(x=>({id:x.id,t:x.t.trim(),c:x.c}));
+      const bev={...baseData};
+      if(bl.length)bev[dkey(d)]=bl;else delete bev[dkey(d)];
+      await setDoc(doc(db,"base",mk),{events:bev});
+    }
+  }catch(e){setStatus(e.code==="permission-denied"?"저장 권한이 없는 계정입니다.":"저장 실패: "+(e.code||"오류"))}
 };
 $("login").onclick=async()=>{
   try{user?await signOut(auth):await signInWithPopup(auth,new GoogleAuthProvider())}
@@ -245,6 +306,9 @@ $("fmodal").onclick=e=>{if(e.target===$("fmodal"))$("fmodal").classList.remove("
 function go(dm){m+=dm;if(m<0){m=11;y--}if(m>11){m=0;y++}subscribe()}
 $("prev").onclick=()=>go(-1);$("next").onclick=()=>go(1);
 $("today").onclick=()=>{y=now.getFullYear();m=now.getMonth();subscribe()};
+try{showBase=localStorage.getItem("showBase")!=="0"}catch(e){}
+$("sbase").checked=showBase;
+$("sbase").onchange=()=>{showBase=$("sbase").checked;try{localStorage.setItem("showBase",showBase?"1":"0")}catch(e){}render()};
 render();subscribe();subProfile();
 </script>
 </body>
