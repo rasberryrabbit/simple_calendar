@@ -34,6 +34,7 @@ button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
 .ev{border-radius:6px;padding:4px 6px;font-size:12.5px;text-align:center;word-break:keep-all;overflow-wrap:anywhere}
 .ev.off{background:var(--off)}.ev.plan{background:var(--plan)}.ev.show{background:var(--show)}.ev.etc{background:var(--etc)}
 .owner{display:flex;align-items:center;gap:8px;margin:0 2px 8px;font-weight:700;font-size:16px}
+.owner label{font-weight:400;font-size:13px;color:var(--mute);cursor:pointer}
 .status{margin:8px 2px;color:var(--mute);font-size:12px}
 .modal{position:fixed;inset:0;background:#0007;display:none;align-items:center;justify-content:center;padding:16px;z-index:9}
 .modal.on{display:flex}
@@ -52,11 +53,13 @@ button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
     <h1 id="title"></h1>
     <button id="next" aria-label="다음 달">›</button>
     <button id="today">오늘</button>
+    <button id="find">캘린더 찾기</button>
     <button id="login">로그인</button>
     <button id="link" style="display:none">링크 복사</button>
     <button id="mine" style="display:none">내 캘린더</button>
   </header>
-  <div class="owner"><span id="oname"></span><button id="rename" style="display:none">이름 설정</button></div>
+  <div class="owner"><span id="oname"></span><button id="rename" style="display:none">이름 설정</button>
+    <label id="lwrap" style="display:none"><input type="checkbox" id="listed"> 다른 사람이 찾을 수 있게 노출</label></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
 </div>
@@ -66,9 +69,15 @@ button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
   <button id="add">+ 일정 추가</button>
   <div class="acts"><button id="cancel">닫기</button><button class="pri" id="save">저장</button></div>
 </div></div>
+<div class="modal" id="fmodal"><div class="box">
+  <h2>공유 캘린더 찾기</h2>
+  <div class="row"><input id="fq" placeholder="이름 검색 (비워 두면 전체)"><button id="fgo">검색</button></div>
+  <div id="fres"></div>
+  <div class="acts"><button id="fclose">닫기</button></div>
+</div></div>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {getFirestore,doc,onSnapshot,setDoc} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getFirestore,doc,onSnapshot,setDoc,collection,query,where,limit,getDocs} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 /* ▼▼▼ Firebase 콘솔 > 프로젝트 설정 > 내 앱(웹)의 설정값으로 교체하세요 ▼▼▼ */
@@ -85,7 +94,7 @@ const firebaseConfig = {
 const TYPES={off:"휴방",plan:"일정",show:"공연·극장",etc:"기타"};
 const DOW=["월","화","수","목","금","토","일"];
 const configured=!firebaseConfig.apiKey.startsWith("YOUR_");
-let db=null,auth=null,user=null,pUnsub=null,pname="",unsub=null,y,m,data={},editing=null,work=[];
+let db=null,auth=null,user=null,pUnsub=null,pname="",plisted=false,unsub=null,y,m,data={},editing=null,work=[];
 const now=new Date();y=now.getFullYear();m=now.getMonth();
 const $=id=>document.getElementById(id);
 const kind=(t,c)=>/휴식|휴방/.test(t)?"off":(c==="off"||c==="show"?"plan":(c||"plan"));
@@ -100,7 +109,7 @@ if(configured){
   const app=initializeApp(firebaseConfig);
   db=getFirestore(app);auth=getAuth(app);
   onAuthStateChanged(auth,u=>{user=u;$("login").textContent=u?"로그아웃":"로그인";updateBtns();subscribe();subProfile()});
-}else{$("login").style.display="none"}
+}else{$("login").style.display="none";$("find").style.display="none"}
 
 function updateBtns(){
   $("link").style.display=user?"":"none";
@@ -108,16 +117,18 @@ function updateBtns(){
 }
 function subProfile(){
   if(pUnsub){pUnsub();pUnsub=null}
-  pname="";
+  pname="";plisted=false;
   const t=target();
   if(!db||!t){renderOwner();return}
-  pUnsub=onSnapshot(doc(db,"users",t),s=>{pname=(s.exists()&&s.data().name)||"";renderOwner()},()=>renderOwner());
+  pUnsub=onSnapshot(doc(db,"users",t),s=>{pname=(s.exists()&&s.data().name)||"";plisted=!!(s.exists()&&s.data().listed);renderOwner()},()=>renderOwner());
 }
 function renderOwner(){
   const t=target(),mine=!!user&&t===user.uid;
   $("oname").textContent=!t?"":(pname?pname+"님의 캘린더":(mine?"표시할 이름을 설정해 주세요":"이름 없는 캘린더"));
   $("rename").style.display=mine?"":"none";
   $("rename").textContent=pname?"이름 변경":"이름 설정";
+  $("lwrap").style.display=mine?"":"none";
+  $("listed").checked=plisted;
 }
 function setStatus(t){$("status").textContent=t}
 function subscribe(){
@@ -199,9 +210,38 @@ $("rename").onclick=async()=>{
   if(v===null)return;
   const name=v.trim().slice(0,20);
   if(!name){setStatus("이름은 비워 둘 수 없어요.");return}
-  try{await setDoc(doc(db,"users",user.uid),{name})}
+  try{await setDoc(doc(db,"users",user.uid),{name},{merge:true})}
   catch(e){setStatus("이름 저장 실패: "+(e.code||"오류"))}
 };
+$("listed").onchange=async()=>{
+  const v=$("listed").checked;
+  if(v&&!pname){$("listed").checked=false;setStatus("노출하려면 먼저 이름을 설정해 주세요.");return}
+  try{await setDoc(doc(db,"users",user.uid),{listed:v},{merge:true})}
+  catch(e){$("listed").checked=!v;setStatus("설정 저장 실패: "+(e.code||"오류"))}
+};
+async function findCals(){
+  const out=$("fres");out.textContent="검색 중...";
+  const q=$("fq").value.trim().toLowerCase();
+  try{
+    const snap=await getDocs(query(collection(db,"users"),where("listed","==",true),limit(200)));
+    const list=[];
+    snap.forEach(d=>{const n=d.data().name||"";if(n&&n.toLowerCase().includes(q))list.push({id:d.id,n})});
+    list.sort((a,b)=>a.n.localeCompare(b.n,"ko"));
+    out.innerHTML="";
+    if(!list.length){out.textContent="결과가 없습니다.";return}
+    list.forEach(x=>{
+      const a=document.createElement("a");
+      a.href=location.pathname+"?u="+x.id;a.textContent=x.n+"님의 캘린더";
+      a.style.cssText="display:block;padding:9px 4px;border-bottom:1px solid var(--line);color:var(--accent);text-decoration:none";
+      out.appendChild(a);
+    });
+  }catch(e){out.textContent="검색 실패: "+(e.code||"오류")}
+}
+$("find").onclick=()=>{$("fmodal").classList.add("on");findCals()};
+$("fgo").onclick=findCals;
+$("fq").onkeydown=e=>{if(e.key==="Enter")findCals()};
+$("fclose").onclick=()=>$("fmodal").classList.remove("on");
+$("fmodal").onclick=e=>{if(e.target===$("fmodal"))$("fmodal").classList.remove("on")};
 function go(dm){m+=dm;if(m<0){m=11;y--}if(m>11){m=0;y++}subscribe()}
 $("prev").onclick=()=>go(-1);$("next").onclick=()=>go(1);
 $("today").onclick=()=>{y=now.getFullYear();m=now.getMonth();subscribe()};
