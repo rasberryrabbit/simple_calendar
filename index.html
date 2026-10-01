@@ -14,8 +14,8 @@ html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 "Pretendard","Noto Sans KR",system-ui,sans-serif}
 .wrap{max-width:1100px;margin:0 auto;padding:12px}
-header{display:flex;align-items:center;gap:8px;background:var(--head);border-radius:12px;padding:10px 14px;margin-bottom:10px}
-header h1{flex:1;margin:0;font-size:20px;color:var(--accent);text-align:center}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--head);border-radius:12px;padding:10px 14px;margin-bottom:10px}
+header h1{flex:1;min-width:120px;margin:0;font-size:20px;color:var(--accent);text-align:center}
 button{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer}
 button:hover{border-color:var(--accent)}
 button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -52,6 +52,8 @@ button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
     <button id="next" aria-label="다음 달">›</button>
     <button id="today">오늘</button>
     <button id="login">로그인</button>
+    <button id="link" style="display:none">링크 복사</button>
+    <button id="mine" style="display:none">내 캘린더</button>
   </header>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
@@ -88,20 +90,27 @@ const kind=(t,c)=>/휴식|휴방/.test(t)?"off":(c==="off"||c==="show"?"plan":(c
 const pad=n=>String(n).padStart(2,"0");
 const mkey=()=>y+"-"+pad(m+1);
 const dkey=d=>mkey()+"-"+pad(d);
-const canWrite=()=>!configured||!!user;
+const viewUid=new URLSearchParams(location.search).get("u");
+const target=()=>viewUid||(user&&user.uid)||null;
+const canWrite=()=>!configured||(!!user&&target()===user.uid);
 
 if(configured){
   const app=initializeApp(firebaseConfig);
   db=getFirestore(app);auth=getAuth(app);
-  onAuthStateChanged(auth,u=>{user=u;$("login").textContent=u?"로그아웃":"로그인";render()});
+  onAuthStateChanged(auth,u=>{user=u;$("login").textContent=u?"로그아웃":"로그인";updateBtns();subscribe()});
 }else{$("login").style.display="none"}
 
+function updateBtns(){
+  $("link").style.display=user?"":"none";
+  $("mine").style.display=(user&&viewUid&&viewUid!==user.uid)?"":"none";
+}
 function setStatus(t){$("status").textContent=t}
 function subscribe(){
   if(unsub){unsub();unsub=null}
   data={};
-  if(!db){render();return}
-  unsub=onSnapshot(doc(db,"months",mkey()),
+  const t=target();
+  if(!db||!t){render();return}
+  unsub=onSnapshot(doc(db,"users",t,"months",mkey()),
     s=>{data=(s.exists()&&s.data().events)||{};render()},
     e=>setStatus("불러오기 실패: "+e.code));
 }
@@ -124,8 +133,9 @@ function render(){
     g.appendChild(c);
   }
   if(!configured)setStatus("Firebase 설정 전이라 저장되지 않는 미리보기 상태입니다.");
-  else if(!user)setStatus("누구나 볼 수 있어요. 수정하려면 오른쪽 위에서 로그인하세요.");
-  else setStatus(user.email+" 로 로그인됨. 날짜를 눌러 일정을 추가·수정하세요.");
+  else if(!target())setStatus("로그인하면 나만의 캘린더가 만들어져요. 링크를 받았다면 그 링크로 접속하세요.");
+  else if(!canWrite())setStatus("다른 사람의 캘린더입니다. (보기 전용)");
+  else setStatus(user.email+" 로 로그인됨. 날짜를 눌러 일정을 추가·수정하고, '링크 복사'로 공유하세요.");
 }
 function openDay(d){
   editing=d;work=(data[dkey(d)]||[]).map(x=>({...x}));
@@ -155,13 +165,19 @@ $("save").onclick=async()=>{
   if(list.length)ev[dkey(editing)]=list;else delete ev[dkey(editing)];
   $("modal").classList.remove("on");
   if(!db){data=ev;render();return}
-  try{await setDoc(doc(db,"months",mkey()),{events:ev})}
+  try{await setDoc(doc(db,"users",user.uid,"months",mkey()),{events:ev})}
   catch(e){setStatus(e.code==="permission-denied"?"저장 권한이 없는 계정입니다.":"저장 실패: "+e.code)}
 };
 $("login").onclick=async()=>{
   try{user?await signOut(auth):await signInWithPopup(auth,new GoogleAuthProvider())}
   catch(e){setStatus("로그인 실패: "+e.code)}
 };
+$("link").onclick=async()=>{
+  const url=location.origin+location.pathname+"?u="+user.uid;
+  try{await navigator.clipboard.writeText(url);setStatus("링크를 복사했어요: "+url)}
+  catch(e){prompt("이 링크를 복사해서 공유하세요",url)}
+};
+$("mine").onclick=()=>{location.href=location.pathname};
 function go(dm){m+=dm;if(m<0){m=11;y--}if(m>11){m=0;y++}subscribe()}
 $("prev").onclick=()=>go(-1);$("next").onclick=()=>go(1);
 $("today").onclick=()=>{y=now.getFullYear();m=now.getMonth();subscribe()};
