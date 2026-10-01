@@ -63,11 +63,13 @@ button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
   </header>
   <div class="owner"><span id="oname"></span><button id="rename" style="display:none">이름 설정</button>
     <button id="export" style="display:none">일정 내려받기</button>
+    <button id="restore" style="display:none">백업에서 복구</button>
+    <input type="file" id="rfile" accept=".json,application/json" hidden>
     <label id="lwrap" style="display:none"><input type="checkbox" id="listed"> 다른 사람이 찾을 수 있게 노출</label>
     <label id="bwrap" style="margin-left:auto"><input type="checkbox" id="sbase"> 출시일 표시</label></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v9)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v10)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -144,6 +146,7 @@ function renderOwner(){
   $("rename").textContent=pname?"이름 변경":"이름 설정";
   $("lwrap").style.display=mine?"":"none";
   $("export").style.display=mine?"":"none";
+  $("restore").style.display=mine?"":"none";
   $("listed").checked=plisted;
 }
 function setStatus(t){$("status").textContent=t}
@@ -351,6 +354,79 @@ $("export").onclick=async()=>{
     saveJson(out,"calendar-backup-");
     setStatus("백업 파일을 내려받았어요.");
   }catch(e){setStatus("내려받기 실패: "+(e.code||"오류"))}
+};
+/* ---------- 백업 JSON에서 복구 ---------- */
+const MK=/^\d{4}-\d{2}$/;
+const expFor=id=>Timestamp.fromDate(new Date(+id.slice(0,4)+EXP_YEARS,+id.slice(5,7),1));
+function cleanEvents(mk,ev,isBase){
+  const out={};let n=0;
+  for(const [d,list] of Object.entries(ev||{})){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||d.slice(0,7)!==mk||!Array.isArray(list))continue;
+    const a=[];
+    list.forEach(x=>{
+      if(!x||typeof x.t!=="string"||!x.t.trim())return;
+      const t=x.t.trim().slice(0,200);
+      a.push({id:(typeof x.id==="string"&&x.id)?x.id.slice(0,20):rid(),t,c:isBase?(BTYPES[x.c]?x.c:"event"):kind(t,x.c)});
+    });
+    if(a.length){out[d]=a;n+=a.length}
+  }
+  return {out,n};
+}
+function mergeInto(dst,src){
+  for(const [d,list] of Object.entries(src)){
+    const a=dst[d]||(dst[d]=[]);
+    list.forEach(x=>{if(!a.some(z=>(z.id&&z.id===x.id)||(z.t===x.t&&z.c===x.c)))a.push(x)});
+  }
+}
+function planFromBackup(obj){
+  const personal={},baseP={};
+  const add=(target,mk,ev,isBase)=>{
+    if(!MK.test(mk))return;
+    const {out,n}=cleanEvents(mk,ev,isBase);
+    if(n)mergeInto(target[mk]||(target[mk]={}),out);
+  };
+  if(obj&&obj.months&&typeof obj.months==="object")for(const [mk,v] of Object.entries(obj.months))add(personal,mk,v&&v.events,false);
+  if(obj&&Array.isArray(obj.expired))obj.expired.forEach(x=>{if(!x)return;if(x.kind==="base")add(baseP,x.id,x.events,true);else add(personal,x.id,x.events,false)});
+  if(obj&&obj.base&&typeof obj.base==="object")for(const [mk,v] of Object.entries(obj.base))add(baseP,mk,v&&v.events,true);
+  return {personal,baseP};
+}
+const cnt=p=>Object.values(p).reduce((a,mo)=>a+Object.values(mo).reduce((b,l)=>b+l.length,0),0);
+async function restoreInto(colPath,plan,docPath){
+  const cur={};
+  const snap=await getDocs(collection(db,...colPath));
+  snap.forEach(d=>{cur[d.id]=d.data().events||{}});
+  let done=0;
+  for(const [mk,add] of Object.entries(plan)){
+    const merged=cur[mk]?JSON.parse(JSON.stringify(cur[mk])):{};
+    mergeInto(merged,add);
+    await setDoc(doc(db,...colPath,mk),{events:merged,expireAt:expFor(mk)});
+    done++;
+  }
+  return done;
+}
+$("restore").onclick=()=>$("rfile").click();
+$("rfile").onchange=async e=>{
+  const file=e.target.files[0];e.target.value="";
+  if(!file||!user)return;
+  try{
+    let obj;
+    try{obj=JSON.parse(await file.text())}catch(x){setStatus("JSON 파일을 읽을 수 없어요.");return}
+    const {personal,baseP}=planFromBackup(obj);
+    const pm=Object.keys(personal).length,bm=Object.keys(baseP).length,doBase=isAdmin()&&bm>0;
+    if(!pm&&!doBase){setStatus(bm?"이 파일에는 출시 일정만 있어서 관리자 계정에서만 복구할 수 있어요.":"복구할 일정이 없는 파일이에요.");return}
+    const old=Object.keys(personal).concat(doBase?Object.keys(baseP):[]).filter(isExpired).length;
+    let msg="'"+file.name+"'에서 복구해요.\n- 내 일정: "+pm+"개월분, "+cnt(personal)+"건";
+    if(doBase)msg+="\n- 출시 일정: "+bm+"개월분, "+cnt(baseP)+"건";
+    else if(bm)msg+="\n- 출시 일정은 관리자만 복구할 수 있어 건너뛰어요.";
+    msg+="\n\n지금 있는 일정은 지우지 않고, 같은 일정은 중복 없이 합쳐요.";
+    if(obj.uid&&obj.uid!==user.uid)msg+="\n※ 다른 계정("+(obj.name||"이름 없음")+")에서 받은 백업이에요. 내 캘린더에 합쳐져요.";
+    if(old)msg+="\n※ "+EXP_YEARS+"년이 지난 "+old+"개월분은 다음 로그인 때 다시 정리 대상이 돼요.";
+    if(!confirm(msg+"\n\n계속할까요?"))return;
+    setStatus("복구 중...");
+    let done=await restoreInto(["users",user.uid,"months"],personal);
+    if(doBase)done+=await restoreInto(["base"],baseP);
+    setStatus(done+"개월분을 복구했어요.");
+  }catch(err){setStatus(err.code==="permission-denied"?"복구 권한이 없어요.":"복구 실패: "+(err.code||err.message||"오류"))}
 };
 function go(dm){m+=dm;if(m<0){m=11;y--}if(m>11){m=0;y++}subscribe()}
 $("prev").onclick=()=>go(-1);$("next").onclick=()=>go(1);
