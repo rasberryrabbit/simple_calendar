@@ -5,4 +5,5 @@
 
 로그인하면 본인의 별칭을 정해서 누구의 일정인지 알 수 있음.  
 일정 표기 이외의 다른 기능은 없음.  
-
+  
+[공유 캘린더 바로 가기](https://rasberryrabbit.github.io/simple_calendar)
