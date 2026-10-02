@@ -31,14 +31,14 @@ service cloud.firestore {
     match /base/{month} {
       allow read: if true;
       allow create, update: if request.auth != null
-        && request.auth.uid in ['HidZYZcXBtfgR31GQijZJ6eJvF62']
+        && request.auth.uid in ['관리자 UID']
         && month.matches('[0-9]{4}-[0-9]{2}')
         && request.resource.data.keys().hasOnly(['events','expireAt'])
         && request.resource.data.events is map
         && (!('expireAt' in request.resource.data)
             || request.resource.data.expireAt is timestamp);
       allow delete: if request.auth != null
-        && request.auth.uid in ['HidZYZcXBtfgR31GQijZJ6eJvF62'];
+        && request.auth.uid in ['관리자 UID'];
     }
   }
 }
