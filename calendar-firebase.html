@@ -109,7 +109,7 @@ const now=new Date();y=now.getFullYear();m=now.getMonth();
 const $=id=>document.getElementById(id);
 const kind=(t,c)=>/휴식|휴방/.test(t)?"off":(c==="off"||c==="show"?"plan":(c||"plan"));
 /* ▼ 출시 일정을 편집할 관리자 UID를 넣으세요 (로그인 후 '링크 복사' 주소의 ?u= 뒤 값) */
-const ADMIN_UIDS=['HidZYZcXBtfgR31GQijZJ6eJvF62'];
+const ADMIN_UIDS=['관리자 UID'];
 const isAdmin=()=>!!user&&ADMIN_UIDS.includes(user.uid);
 const BTYPES={game:"게임",event:"이벤트",gear:"장비"};
 const BICON={game:"🎮",event:"🎉",gear:"🖥️"};
