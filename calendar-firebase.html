@@ -2,14 +2,21 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
+<script>try{var p=localStorage.getItem("pal");if(p)document.documentElement.dataset.pal=p}catch(e){}</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>공유 캘린더</title>
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
 --bg:#faf9fc;--card:#fff;--ink:#26233a;--mute:#8a869b;--line:#e3e0ec;--head:#ddd4ea;--accent:#5b3fa0;
---sat:#2f6fd0;--sun:#d9484f;--off:#e2e1e6;--plan:#d8ecd8;--show:#fff0c8;--etc:#dbe8fb;--dim:#f1f0f5;--base:#e8f0fb}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17151f;--card:#201e2b;--ink:#ece9f6;--mute:#9591a8;--line:#363349;--head:#3a3158;--accent:#b9a3f0;--sat:#7fa8f0;--sun:#f08a90;--off:#383643;--plan:#2f4a33;--show:#54492a;--etc:#2c3f5c;--dim:#1a1824;--base:#243049}}
-:root[data-theme="dark"]{--bg:#17151f;--card:#201e2b;--ink:#ece9f6;--mute:#9591a8;--line:#363349;--head:#3a3158;--accent:#b9a3f0;--sat:#7fa8f0;--sun:#f08a90;--off:#383643;--plan:#2f4a33;--show:#54492a;--etc:#2c3f5c;--dim:#1a1824;--base:#243049}
+--sat:#2f6fd0;--sun:#d9484f;--off:#e2e1e6;--plan:#d8ecd8;--show:#fff0c8;--etc:#dbe8fb;--dim:#f1f0f5;--base:#e8f0fb;--onaccent:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17151f;--card:#201e2b;--ink:#ece9f6;--mute:#9591a8;--line:#363349;--head:#3a3158;--accent:#b9a3f0;--sat:#7fa8f0;--sun:#f08a90;--off:#383643;--plan:#2f4a33;--show:#54492a;--etc:#2c3f5c;--dim:#1a1824;--base:#243049;--onaccent:#1a1030}}
+:root[data-theme="dark"]{--bg:#17151f;--card:#201e2b;--ink:#ece9f6;--mute:#9591a8;--line:#363349;--head:#3a3158;--accent:#b9a3f0;--sat:#7fa8f0;--sun:#f08a90;--off:#383643;--plan:#2f4a33;--show:#54492a;--etc:#2c3f5c;--dim:#1a1824;--base:#243049;--onaccent:#1a1030}
+:root[data-pal="ocean"]{--bg:#f3f8fb;--card:#ffffff;--ink:#10303f;--mute:#56707f;--line:#cfe0ea;--head:#cfe8f3;--accent:#0b5f8a;--onaccent:#ffffff;--sat:#1565c0;--sun:#c62828;--off:#dfe5e9;--plan:#d4efe3;--show:#fdeec2;--etc:#d6e6f7;--dim:#eaf2f7;--base:#e1f1fa}
+:root[data-pal="forest"]{--bg:#f4f8f3;--card:#ffffff;--ink:#1b2e1f;--mute:#5a705f;--line:#d3e1d1;--head:#d6ead3;--accent:#2e6b34;--onaccent:#ffffff;--sat:#1d6fb8;--sun:#c0392b;--off:#e2e6df;--plan:#cfe9cf;--show:#fbefc4;--etc:#d9e8f2;--dim:#ecf3ea;--base:#e3f1e0}
+:root[data-pal="sunset"]{--bg:#fdf7f2;--card:#ffffff;--ink:#3a2418;--mute:#7f604e;--line:#ecd9cc;--head:#f7dcc6;--accent:#b4470f;--onaccent:#ffffff;--sat:#1e63b5;--sun:#c4262e;--off:#ebe2dc;--plan:#dff0d4;--show:#ffe9b8;--etc:#e3e9f4;--dim:#f6ece4;--base:#fbe9d8}
+:root[data-pal="contrast"]{--bg:#ffffff;--card:#ffffff;--ink:#000000;--mute:#333333;--line:#6b6b6b;--head:#111111;--accent:#ffd400;--onaccent:#000000;--sat:#0033cc;--sun:#b00020;--off:#bdbdbd;--plan:#9be09b;--show:#ffe066;--etc:#a9c8ff;--dim:#ececec;--base:#cfe3ff}
+:root[data-pal="night"]{--bg:#0f1420;--card:#171e2e;--ink:#e8edf7;--mute:#98a4bd;--line:#2b3550;--head:#1f2b47;--accent:#7cc4ff;--onaccent:#07203a;--sat:#7fb0ff;--sun:#ff8f98;--off:#333b4d;--plan:#264a38;--show:#5a4a1f;--etc:#25405f;--dim:#131a29;--base:#1d2a44}
+select.pal{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 8px;margin-left:auto;cursor:pointer}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 "Pretendard","Noto Sans KR",system-ui,sans-serif}
@@ -18,7 +25,7 @@ header{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--h
 header h1{flex:1;min-width:120px;margin:0;font-size:20px;color:var(--accent);text-align:center}
 button{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer}
 button:hover{border-color:var(--accent)}
-button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--accent)}
 .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--card)}
 .grid{display:grid;grid-template-columns:repeat(7,minmax(92px,1fr));min-width:644px}
 .dow{padding:7px 0;text-align:center;font-weight:600;background:var(--dim);border-bottom:1px solid var(--line)}
@@ -28,7 +35,7 @@ button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
 .cell.out{background:var(--dim);cursor:default;opacity:.55}
 .cell:not(.out):hover{background:var(--dim)}
 .n{font-weight:700;font-size:13px}
-.today .n{background:var(--accent);color:#fff;border-radius:10px;padding:0 7px;align-self:flex-start}
+.today .n{background:var(--accent);color:var(--onaccent);border-radius:10px;padding:0 7px;align-self:flex-start}
 .cell.hasbase{background:var(--base)}
 .base{font-size:11px;line-height:1.3;color:var(--mute);text-align:left;word-break:keep-all;overflow-wrap:anywhere}
 .cell.rest,.cell.rest:hover{background:repeating-linear-gradient(135deg,var(--off) 0 8px,transparent 8px 16px),var(--off)}
@@ -66,10 +73,11 @@ button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
     <button id="restore" style="display:none">백업에서 복구</button>
     <input type="file" id="rfile" accept=".json,application/json" hidden>
     <label id="lwrap" style="display:none"><input type="checkbox" id="listed"> 다른 사람이 찾을 수 있게 노출</label>
-    <label id="bwrap" style="margin-left:auto"><input type="checkbox" id="sbase"> 출시일 표시</label></div>
+    <select class="pal" id="pal" title="색상 테마" aria-label="색상 테마"><option value="">기본(자동)</option><option value="ocean">바다</option><option value="forest">숲</option><option value="sunset">석양</option><option value="contrast">고대비</option><option value="night">야간</option></select>
+    <label id="bwrap" style="margin-left:12px"><input type="checkbox" id="sbase"> 출시일 표시</label></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v10)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v11)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -91,13 +99,11 @@ import {getFirestore,doc,onSnapshot,setDoc,collection,query,where,limit,getDocs,
 import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 /* ▼▼▼ Firebase 콘솔 > 프로젝트 설정 > 내 앱(웹)의 설정값으로 교체하세요 ▼▼▼ */
-const firebaseConfig = {
-  apiKey: "AIzaSyB5Djj8sw_P6P07KMHnWefdkJ14DJ7sskg",
-  authDomain: "calendar-1-ecf45.firebaseapp.com",
-  projectId: "calendar-1-ecf45",
-  storageBucket: "calendar-1-ecf45.firebasestorage.app",
-  messagingSenderId: "328951865340",
-  appId: "1:328951865340:web:5aac388de4d7895aa91c79"
+const firebaseConfig={
+  apiKey:"YOUR_API_KEY",
+  authDomain:"YOUR_PROJECT.firebaseapp.com",
+  projectId:"YOUR_PROJECT",
+  appId:"YOUR_APP_ID"
 };
 /* ▲▲▲ */
 
@@ -109,7 +115,7 @@ const now=new Date();y=now.getFullYear();m=now.getMonth();
 const $=id=>document.getElementById(id);
 const kind=(t,c)=>/휴식|휴방/.test(t)?"off":(c==="off"||c==="show"?"plan":(c||"plan"));
 /* ▼ 출시 일정을 편집할 관리자 UID를 넣으세요 (로그인 후 '링크 복사' 주소의 ?u= 뒤 값) */
-const ADMIN_UIDS=['관리자 UID'];
+const ADMIN_UIDS=[];
 const isAdmin=()=>!!user&&ADMIN_UIDS.includes(user.uid);
 const BTYPES={game:"게임",event:"이벤트",gear:"장비"};
 const BICON={game:"🎮",event:"🎉",gear:"🖥️"};
@@ -434,6 +440,15 @@ $("today").onclick=()=>{y=now.getFullYear();m=now.getMonth();subscribe()};
 try{showBase=localStorage.getItem("showBase")!=="0"}catch(e){}
 $("sbase").checked=showBase;
 $("sbase").onchange=()=>{showBase=$("sbase").checked;try{localStorage.setItem("showBase",showBase?"1":"0")}catch(e){}render()};
+(function(){
+  const sel=document.getElementById("pal");
+  sel.value=document.documentElement.dataset.pal||"";
+  sel.onchange=()=>{
+    const v=sel.value;
+    if(v)document.documentElement.dataset.pal=v;else delete document.documentElement.dataset.pal;
+    try{localStorage.setItem("pal",v)}catch(e){}
+  };
+})();
 render();subscribe();subProfile();
 </script>
 </body>
