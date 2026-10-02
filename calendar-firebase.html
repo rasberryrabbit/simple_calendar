@@ -16,6 +16,8 @@
 :root[data-pal="sunset"]{--bg:#fdf7f2;--card:#ffffff;--ink:#3a2418;--mute:#7f604e;--line:#ecd9cc;--head:#f7dcc6;--accent:#b4470f;--onaccent:#ffffff;--sat:#1e63b5;--sun:#c4262e;--off:#ebe2dc;--plan:#dff0d4;--show:#ffe9b8;--etc:#e3e9f4;--dim:#f6ece4;--base:#fbe9d8}
 :root[data-pal="contrast"]{--bg:#ffffff;--card:#ffffff;--ink:#000000;--mute:#333333;--line:#6b6b6b;--head:#111111;--accent:#ffd400;--onaccent:#000000;--sat:#0033cc;--sun:#b00020;--off:#bdbdbd;--plan:#9be09b;--show:#ffe066;--etc:#a9c8ff;--dim:#ececec;--base:#cfe3ff}
 :root[data-pal="night"]{--bg:#0f1420;--card:#171e2e;--ink:#e8edf7;--mute:#98a4bd;--line:#2b3550;--head:#1f2b47;--accent:#7cc4ff;--onaccent:#07203a;--sat:#7fb0ff;--sun:#ff8f98;--off:#333b4d;--plan:#264a38;--show:#5a4a1f;--etc:#25405f;--dim:#131a29;--base:#1d2a44}
+:root[data-pal="pink"]{--bg:#fff5f8;--card:#ffffff;--ink:#3d1f2b;--mute:#85596b;--line:#f1d3df;--head:#fbd5e3;--accent:#b3225f;--onaccent:#ffffff;--sat:#2563b8;--sun:#d0143c;--off:#efe3e8;--plan:#dcefd9;--show:#ffe8b5;--etc:#e0e4f6;--dim:#fbeaf0;--base:#fde4ee}
+:root[data-pal="pastel"]{--bg:#faf8ff;--card:#ffffff;--ink:#2f2a45;--mute:#767190;--line:#e4def2;--head:#e5dcf7;--accent:#6a4fb0;--onaccent:#ffffff;--sat:#4a7fd0;--sun:#e0607a;--off:#e8e6ee;--plan:#d6f2e2;--show:#fff0cf;--etc:#d9ebfb;--dim:#f3f0fa;--base:#fde8dc}
 select.pal{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 8px;margin-left:auto;cursor:pointer}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *{box-sizing:border-box}
@@ -73,11 +75,11 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
     <button id="restore" style="display:none">백업에서 복구</button>
     <input type="file" id="rfile" accept=".json,application/json" hidden>
     <label id="lwrap" style="display:none"><input type="checkbox" id="listed"> 다른 사람이 찾을 수 있게 노출</label>
-    <select class="pal" id="pal" title="색상 테마" aria-label="색상 테마"><option value="">기본(자동)</option><option value="ocean">바다</option><option value="forest">숲</option><option value="sunset">석양</option><option value="contrast">고대비</option><option value="night">야간</option></select>
+    <select class="pal" id="pal" title="색상 테마" aria-label="색상 테마"><option value="">기본(자동)</option><option value="pink">핑크</option><option value="pastel">파스텔</option><option value="ocean">바다</option><option value="forest">숲</option><option value="sunset">석양</option><option value="contrast">고대비</option><option value="night">야간</option></select>
     <label id="bwrap" style="margin-left:12px"><input type="checkbox" id="sbase"> 출시일 표시</label></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v11)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v12)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
