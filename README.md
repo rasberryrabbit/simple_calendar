@@ -27,5 +27,6 @@ firestore의 저장용량이 여유가 있다면 6년이 지난 일정도 복구
 8. [https://console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials)에서 Firebase가 자동으로 만든 키는 "Browser key (auto created by Firebase)"라는 이름으로 이 목록에 나옵니다. 그 키를 누릅니다.
 9. 애플리케이션 제한사항에서 웹사이트(HTTP 리퍼러)를 선택하고, "내GitHub이름.github.io/* " 와 "프로젝트ID.firebaseapp.com/* "를 추가합니다. (로그인 팝업이 이 주소를 쓰기 때문에 빼면 구글 로그인이 막힙니다)
 
+  
 
-
+<img width="1093" height="728" alt="스크린샷 2026-10-02 182049" src="https://github.com/user-attachments/assets/70e718b1-eba7-4294-95b3-f38b9eda7ec3" />
