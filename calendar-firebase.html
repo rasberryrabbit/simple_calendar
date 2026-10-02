@@ -47,6 +47,12 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
 .owner{display:flex;align-items:center;gap:8px;margin:0 2px 8px;font-weight:700;font-size:16px}
 .owner label{font-weight:400;font-size:13px;color:var(--mute);cursor:pointer}
 .sub{font-size:12px;color:var(--mute);margin:10px 0 6px;font-weight:600}
+.menuwrap{position:relative;display:inline-block}
+.menu{position:absolute;top:calc(100% + 6px);left:0;z-index:5;min-width:240px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px;box-shadow:0 8px 24px #0003}
+.menu[hidden]{display:none}
+.menu button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:8px 10px;border-radius:8px}
+.menu button:hover{background:var(--dim)}
+.menu small{display:block;color:var(--mute);font-size:11px;margin-top:2px}
 .status{margin:8px 2px;color:var(--mute);font-size:12px}
 .modal{position:fixed;inset:0;background:#0007;display:none;align-items:center;justify-content:center;padding:16px;z-index:9}
 .modal.on{display:flex}
@@ -71,15 +77,20 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
     <button id="mine" style="display:none">내 캘린더</button>
   </header>
   <div class="owner"><span id="oname"></span><button id="rename" style="display:none">이름 설정</button>
-    <button id="export" style="display:none">일정 내려받기</button>
-    <button id="restore" style="display:none">백업에서 복구</button>
+    <span class="menuwrap" id="bkwrap" style="display:none">
+      <button id="bkbtn" aria-haspopup="true" aria-expanded="false">백업 ▾</button>
+      <div class="menu" id="bkmenu" hidden>
+        <button id="export">⬇ 일정 내려받기<small>내 일정을 JSON 파일로 저장해요</small></button>
+        <button id="restore">⬆ 백업에서 복구<small>JSON 파일의 일정을 합쳐 넣어요</small></button>
+      </div>
+    </span>
     <input type="file" id="rfile" accept=".json,application/json" hidden>
     <label id="lwrap" style="display:none"><input type="checkbox" id="listed"> 다른 사람이 찾을 수 있게 노출</label>
     <select class="pal" id="pal" title="색상 테마" aria-label="색상 테마"><option value="">기본(자동)</option><option value="pink">핑크</option><option value="pastel">파스텔</option><option value="ocean">바다</option><option value="forest">숲</option><option value="sunset">석양</option><option value="contrast">고대비</option><option value="night">야간</option></select>
     <label id="bwrap" style="margin-left:12px"><input type="checkbox" id="sbase"> 출시일 표시</label></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v12)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v13)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -153,8 +164,7 @@ function renderOwner(){
   $("rename").style.display=mine?"":"none";
   $("rename").textContent=pname?"이름 변경":"이름 설정";
   $("lwrap").style.display=mine?"":"none";
-  $("export").style.display=mine?"":"none";
-  $("restore").style.display=mine?"":"none";
+  $("bkwrap").style.display=mine?"":"none";
   $("listed").checked=plisted;
 }
 function setStatus(t){$("status").textContent=t}
@@ -436,6 +446,16 @@ $("rfile").onchange=async e=>{
     setStatus(done+"개월분을 복구했어요.");
   }catch(err){setStatus(err.code==="permission-denied"?"복구 권한이 없어요.":"복구 실패: "+(err.code||err.message||"오류"))}
 };
+const closeMenu=()=>{$("bkmenu").hidden=true;$("bkbtn").setAttribute("aria-expanded","false")};
+$("bkbtn").onclick=e=>{
+  e.stopPropagation();
+  const open=$("bkmenu").hidden;
+  $("bkmenu").hidden=!open;
+  $("bkbtn").setAttribute("aria-expanded",open?"true":"false");
+};
+$("bkmenu").addEventListener("click",closeMenu);
+document.addEventListener("click",e=>{if(!$("bkwrap").contains(e.target))closeMenu()});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeMenu()});
 function go(dm){m+=dm;if(m<0){m=11;y--}if(m>11){m=0;y++}subscribe()}
 $("prev").onclick=()=>go(-1);$("next").onclick=()=>go(1);
 $("today").onclick=()=>{y=now.getFullYear();m=now.getMonth();subscribe()};
