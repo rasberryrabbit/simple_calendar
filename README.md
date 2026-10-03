@@ -18,14 +18,15 @@ firestore의 저장용량이 여유가 있다면 6년이 지난 일정도 복구
 
 설정 방법.
 1. [console.firebase.google.com](console.firebase.google.com)에서 프로젝트 추가를 누르고 Google 애널리틱스는 꺼도 됩니다.
-2. 프로젝트 개요에서 </>(웹) 아이콘을 눌러 앱을 등록합니다. 호스팅 설정은 체크하지 않아도 됩니다. 화면에 나오는 firebaseConfig 값(apiKey, authDomain, projectId, appId)을 HTML 파일 위쪽의 같은 자리에 붙여 넣습니다. 관리자가 될 사용자의 UID도 바꿔서 넣어야 합니다. 출시일 일정이 필요하지 않다면 설정하지 않아도 됩니다. 출시일 일정은 관리자가 직접 입력해야 합니다.
+2. 프로젝트 개요에서 </>(웹) 아이콘을 눌러 앱을 등록합니다. 호스팅 설정은 체크하지 않아도 됩니다. 화면에 나오는 firebaseConfig 값(apiKey, authDomain, projectId, appId)을 HTML 파일 위쪽의 같은 자리에 붙여 넣습니다.
 3. Firestore Database > 데이터베이스 만들기에서 위치는 asia-northeast3(서울)을 추천합니다. 모드는 아무거나 골라도 됩니다.
-4. Firestore의 규칙 탭에 Firestore_rules.txt 의 내용을 붙여넣어요. 거기에 관리자 ID를 관리자가 될 사용자의 UID를 넣습니다.
+4. Firestore의 규칙 탭에 Firestore_rules.txt 의 내용을 붙여넣어요.
 5. Authentication > 시작하기 > Google을 사용 설정으로 바꾸고 저장합니다.
 6. Authentication > 설정 > 승인된 도메인에 사이트 주소(예: 내아이디.github.io)를 추가합니다. 이 단계를 빼면 로그인 팝업이 오류로 막힙니다.
 7. GitHub Pages 등에 calendar-firebase.html을 index.html로 이름을 바꿔서 올립니다. 
 8. [https://console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials)에서 Firebase가 자동으로 만든 키는 "Browser key (auto created by Firebase)"라는 이름으로 이 목록에 나옵니다. 그 키를 누릅니다.
 9. 애플리케이션 제한사항에서 웹사이트(HTTP 리퍼러)를 선택하고, "내GitHub이름.github.io/* " 와 "프로젝트ID.firebaseapp.com/* "를 추가합니다. (로그인 팝업이 이 주소를 쓰기 때문에 빼면 구글 로그인이 막힙니다)
+10. 일정관리 페이지에 처음 로그인을 하면 관리자로 설정할 것인지 메시지가 뜨는데 확인을 누릅니다. 1명은 항상 관리자가 있어야 합니다.
 
   
 출시일정만 입력한 스샷  
