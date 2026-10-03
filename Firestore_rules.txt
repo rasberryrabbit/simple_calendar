@@ -3,7 +3,15 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
-    function isAdmin() { return signedIn() && request.auth.uid in ['관리자UID']; }
+    function listedAdmins() { return []; }
+    function isOwner() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/config/owner)
+        && get(/databases/$(database)/documents/config/owner).data.uid == request.auth.uid;
+    }
+    function isAdmin() {
+      return signedIn() && (isOwner() || request.auth.uid in listedAdmins());
+    }
     function isMember(uid) {
       return exists(/databases/$(database)/documents/members/$(uid));
     }
@@ -17,6 +25,21 @@ service cloud.firestore {
     function oldCount() {
       return exists(/databases/$(database)/documents/config/stats)
         ? get(/databases/$(database)/documents/config/stats).data.count : 0;
+    }
+
+    // ---- 소유자 ----
+    match /config/owner {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && !exists(/databases/$(database)/documents/config/owner)
+        && request.resource.data.keys().hasOnly(['uid','at'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.at == request.time
+        && (listedAdmins().size() == 0 || request.auth.uid in listedAdmins());
+      allow update: if isOwner()
+        && request.resource.data.keys().hasOnly(['uid','at'])
+        && request.resource.data.uid is string;
+      allow delete: if false;
     }
 
     // ---- 인원 제한 ----
@@ -37,7 +60,10 @@ service cloud.firestore {
         && (isAdmin()
             || (request.resource.data.count == oldCount() + 1
                 && !exists(/databases/$(database)/documents/members/$(request.auth.uid))
-                && existsAfter(/databases/$(database)/documents/members/$(request.auth.uid))));
+                && existsAfter(/databases/$(database)/documents/members/$(request.auth.uid)))
+            || (request.resource.data.count == oldCount() - 1
+                && exists(/databases/$(database)/documents/members/$(request.auth.uid))
+                && !existsAfter(/databases/$(database)/documents/members/$(request.auth.uid))));
     }
     match /members/{uid} {
       allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
@@ -48,7 +74,7 @@ service cloud.firestore {
         && request.resource.data.joinedAt == request.time
         && getAfter(/databases/$(database)/documents/config/stats).data.count == oldCount() + 1
         && getAfter(/databases/$(database)/documents/config/stats).data.count <= maxUsers();
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || (signedIn() && request.auth.uid == uid);
     }
     match /blocked/{uid} {
       allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
@@ -62,13 +88,14 @@ service cloud.firestore {
     match /users/{uid} {
       allow get: if true;
       allow list: if resource.data.listed == true;
-      allow write: if canUse(uid)
+      allow create, update: if canUse(uid)
         && request.resource.data.keys().hasOnly(['name','listed'])
         && request.resource.data.name is string
         && request.resource.data.name.size() >= 1
         && request.resource.data.name.size() <= 20
         && (!('listed' in request.resource.data)
             || request.resource.data.listed is bool);
+      allow delete: if canUse(uid);
     }
 
     // ---- 개인 일정 ----
