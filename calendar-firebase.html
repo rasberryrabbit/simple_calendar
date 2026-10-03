@@ -52,6 +52,7 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
 .menu[hidden]{display:none}
 .menu button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:8px 10px;border-radius:8px}
 .menu button:hover{background:var(--dim)}
+.menu .danger{color:var(--sun)}
 .menu small{display:block;color:var(--mute);font-size:11px;margin-top:2px}
 .status{margin:8px 2px;color:var(--mute);font-size:12px}
 .modal{position:fixed;inset:0;background:#0007;display:none;align-items:center;justify-content:center;padding:16px;z-index:9}
@@ -78,19 +79,22 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
   </header>
   <div class="owner"><span id="oname"></span><button id="rename" style="display:none">이름 설정</button>
     <span class="menuwrap" id="bkwrap" style="display:none">
-      <button id="bkbtn" aria-haspopup="true" aria-expanded="false">백업 ▾</button>
+      <button id="bkbtn" aria-haspopup="true" aria-expanded="false">더보기 ▾</button>
       <div class="menu" id="bkmenu" hidden>
         <button id="export">⬇ 일정 내려받기<small>내 일정을 JSON 파일로 저장해요</small></button>
         <button id="restore">⬆ 백업에서 복구<small>JSON 파일의 일정을 합쳐 넣어요</small></button>
+        <hr id="leavehr" style="display:none;border:0;border-top:1px solid var(--line);margin:4px 0">
+        <button id="leave" class="danger" style="display:none">🚪 탈퇴하기<small>내 일정·이름을 삭제하고 가입을 취소해요</small></button>
       </div>
     </span>
     <input type="file" id="rfile" accept=".json,application/json" hidden>
+    <button id="adm" style="display:none">사용자 관리</button>
     <label id="lwrap" style="display:none"><input type="checkbox" id="listed"> 다른 사람이 찾을 수 있게 노출</label>
     <select class="pal" id="pal" title="색상 테마" aria-label="색상 테마"><option value="">기본(자동)</option><option value="pink">핑크</option><option value="pastel">파스텔</option><option value="ocean">바다</option><option value="forest">숲</option><option value="sunset">석양</option><option value="contrast">고대비</option><option value="night">야간</option></select>
     <label id="bwrap" style="margin-left:12px"><input type="checkbox" id="sbase"> 출시일 표시</label></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v13)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v15)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -106,10 +110,20 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
   <div id="fres"></div>
   <div class="acts"><button id="fclose">닫기</button></div>
 </div></div>
+<div class="modal" id="amodal"><div class="box">
+  <h2>사용자 관리</h2>
+  <div id="astat" class="sub"></div>
+  <div class="row"><input id="amax" type="number" min="1" max="1000" style="max-width:110px"><button id="amaxsave" class="pri">최대 인원 저장</button></div>
+  <div class="sub">가입한 사용자</div>
+  <div id="alist"></div>
+  <div class="sub">사용 제한된 계정</div>
+  <div id="ablock"></div>
+  <div class="acts"><button id="aclose">닫기</button></div>
+</div></div>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {getFirestore,doc,onSnapshot,setDoc,collection,query,where,limit,getDocs,deleteDoc,Timestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getFirestore,doc,onSnapshot,setDoc,collection,query,where,limit,getDocs,getDoc,deleteDoc,runTransaction,serverTimestamp,writeBatch,Timestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged,deleteUser,reauthenticateWithPopup} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 /* ▼▼▼ Firebase 콘솔 > 프로젝트 설정 > 내 앱(웹)의 설정값으로 교체하세요 ▼▼▼ */
 const firebaseConfig={
@@ -123,12 +137,13 @@ const firebaseConfig={
 const TYPES={off:"휴방",plan:"일정",show:"공연·극장",etc:"기타"};
 const DOW=["월","화","수","목","금","토","일"];
 const configured=!firebaseConfig.apiKey.startsWith("YOUR_");
-let db=null,auth=null,user=null,cleaned=false,pUnsub=null,pname="",plisted=false,bUnsub=null,baseWork=[],baseData={},showBase=true,unsub=null,y,m,data={},editing=null,work=[];
+let db=null,auth=null,user=null,cleaned=false,member=false,joinMsg="",pUnsub=null,pname="",plisted=false,bUnsub=null,baseWork=[],baseData={},showBase=true,unsub=null,y,m,data={},editing=null,work=[];
 const now=new Date();y=now.getFullYear();m=now.getMonth();
 const $=id=>document.getElementById(id);
 const kind=(t,c)=>/휴식|휴방/.test(t)?"off":(c==="off"||c==="show"?"plan":(c||"plan"));
 /* ▼ 출시 일정을 편집할 관리자 UID를 넣으세요 (로그인 후 '링크 복사' 주소의 ?u= 뒤 값) */
 const ADMIN_UIDS=[];
+const DEFAULT_MAX=20; // 관리자가 바꾸기 전 기본 최대 가입 인원(관리자 제외)
 const isAdmin=()=>!!user&&ADMIN_UIDS.includes(user.uid);
 const BTYPES={game:"게임",event:"이벤트",gear:"장비"};
 const BICON={game:"🎮",event:"🎉",gear:"🖥️"};
@@ -139,16 +154,18 @@ const mkey=()=>y+"-"+pad(m+1);
 const dkey=d=>mkey()+"-"+pad(d);
 const viewUid=new URLSearchParams(location.search).get("u");
 const target=()=>viewUid||(user&&user.uid)||null;
-const canWrite=()=>!configured||(!!user&&target()===user.uid);
+const active=()=>!!user&&(member||isAdmin());
+const canWrite=()=>!configured||(active()&&target()===user.uid);
 
 if(configured){
   const app=initializeApp(firebaseConfig);
   db=getFirestore(app);auth=getAuth(app);
-  onAuthStateChanged(auth,u=>{user=u;$("login").textContent=u?"로그아웃":"로그인";if(!u)cleaned=false;updateBtns();subscribe();subProfile();cleanup()});
+  onAuthStateChanged(auth,async u=>{user=u;member=false;joinMsg="";$("login").textContent=u?"로그아웃":"로그인";if(!u)cleaned=false;if(u)await checkMember();updateBtns();subscribe();subProfile();cleanup()});
 }else{$("login").style.display="none";$("find").style.display="none";$("bwrap").style.display="none"}
 
 function updateBtns(){
-  $("link").style.display=user?"":"none";
+  $("link").style.display=active()?"":"none";
+  $("adm").style.display=isAdmin()?"":"none";
   $("mine").style.display=(user&&viewUid&&viewUid!==user.uid)?"":"none";
 }
 function subProfile(){
@@ -159,12 +176,14 @@ function subProfile(){
   pUnsub=onSnapshot(doc(db,"users",t),s=>{pname=(s.exists()&&s.data().name)||"";plisted=!!(s.exists()&&s.data().listed);renderOwner()},()=>renderOwner());
 }
 function renderOwner(){
-  const t=target(),mine=!!user&&t===user.uid;
+  const t=target(),mine=active()&&t===user.uid;
   $("oname").textContent=!t?"":(pname?pname+"님의 캘린더":(mine?"표시할 이름을 설정해 주세요":"이름 없는 캘린더"));
   $("rename").style.display=mine?"":"none";
   $("rename").textContent=pname?"이름 변경":"이름 설정";
   $("lwrap").style.display=mine?"":"none";
   $("bkwrap").style.display=mine?"":"none";
+  const canLeave=mine&&member&&!isAdmin();
+  $("leave").style.display=$("leavehr").style.display=canLeave?"":"none";
   $("listed").checked=plisted;
 }
 function setStatus(t){$("status").textContent=t}
@@ -214,6 +233,7 @@ function render(){
   }
   if(!configured)setStatus("Firebase 설정 전이라 저장되지 않는 미리보기 상태입니다.");
   else if(!target())setStatus("로그인하면 나만의 캘린더가 만들어져요. 링크를 받았다면 그 링크로 접속하세요.");
+  else if(user&&!active()&&target()===user.uid)setStatus(joinMsg||"가입 확인 중...");
   else if(!canWrite())setStatus("다른 사람의 캘린더입니다. (보기 전용)");
   else setStatus("날짜를 눌러 일정을 추가·수정하고, '링크 복사'로 공유하세요.");
 }
@@ -340,7 +360,7 @@ function saveJson(obj,prefix){
 const EXP_YEARS=6;
 const isExpired=id=>{const m=/^(\d{4})-(\d{2})$/.exec(id);return !!m&&new Date(+m[1]+EXP_YEARS,+m[2],1)<=new Date()};
 async function cleanup(){
-  if(!db||!user||cleaned)return;
+  if(!db||!user||cleaned||!active())return;
   if(viewUid&&viewUid!==user.uid)return;
   cleaned=true;
   try{
@@ -456,6 +476,114 @@ $("bkbtn").onclick=e=>{
 $("bkmenu").addEventListener("click",closeMenu);
 document.addEventListener("click",e=>{if(!$("bkwrap").contains(e.target))closeMenu()});
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeMenu()});
+/* ---------- 가입 인원 제한 ---------- */
+async function checkMember(){
+  member=false;joinMsg="";
+  if(!db||!user||isAdmin())return;
+  try{
+    const m=await getDoc(doc(db,"members",user.uid));
+    if(m.exists()){member=true;return}
+    await joinMember();
+  }catch(e){joinMsg="가입 확인 실패: "+(e.code||"오류")}
+}
+async function joinMember(){
+  const sRef=doc(db,"config","settings"),cRef=doc(db,"config","stats"),mRef=doc(db,"members",user.uid),bRef=doc(db,"blocked",user.uid);
+  try{
+    await runTransaction(db,async tx=>{
+      const [s,c,b]=await Promise.all([tx.get(sRef),tx.get(cRef),tx.get(bRef)]);
+      if(b.exists())throw {code:"blocked"};
+      const max=s.exists()?s.data().maxUsers:DEFAULT_MAX;
+      const cnt=c.exists()?c.data().count:0;
+      if(cnt>=max)throw {code:"full"};
+      tx.set(mRef,{joinedAt:serverTimestamp()});
+      tx.set(cRef,{count:cnt+1});
+    });
+    member=true;
+  }catch(e){
+    if(e.code==="blocked")joinMsg="사용이 제한된 계정이에요. 지금은 다른 사람의 캘린더를 보기만 할 수 있어요.";
+    else if(e.code==="full"||e.code==="permission-denied")joinMsg="가입 가능 인원이 가득 찼어요. 지금은 다른 사람의 캘린더를 보기만 할 수 있어요. 관리자에게 문의해 주세요.";
+    else joinMsg="가입 처리 실패: "+(e.code||"오류");
+  }
+}
+async function nameOf(id){
+  try{const x=await getDoc(doc(db,"users",id));return (x.exists()&&x.data().name)||"이름 없음"}catch(e){return "이름 없음"}
+}
+function adminRow(box,name,id,label,onClick){
+  const row=document.createElement("div");row.className="row";
+  const t=document.createElement("div");t.style.cssText="flex:1;padding:6px 2px";t.textContent=name+" ("+id.slice(0,6)+"…)";
+  const b=document.createElement("button");b.textContent=label;b.onclick=onClick;
+  row.append(t,b);box.appendChild(row);
+}
+async function loadAdmin(){
+  $("astat").textContent="불러오는 중...";
+  try{
+    const [s,ms,bs,c]=await Promise.all([getDoc(doc(db,"config","settings")),getDocs(collection(db,"members")),getDocs(collection(db,"blocked")),getDoc(doc(db,"config","stats"))]);
+    const max=s.exists()?s.data().maxUsers:DEFAULT_MAX;
+    const ids=[],bids=[];ms.forEach(d=>ids.push(d.id));bs.forEach(d=>bids.push(d.id));
+    if(!c.exists()||c.data().count!==ids.length)await setDoc(doc(db,"config","stats"),{count:ids.length});
+    $("amax").value=max;
+    $("astat").textContent="가입 "+ids.length+"명 / 최대 "+max+"명 (관리자는 인원에 포함되지 않아요)";
+    const box=$("alist"),bbox=$("ablock");box.innerHTML="";bbox.innerHTML="";
+    const names=await Promise.all(ids.map(nameOf)),bnames=await Promise.all(bids.map(nameOf));
+    if(!ids.length)box.textContent="아직 가입한 사용자가 없어요.";
+    ids.forEach((id,i)=>adminRow(box,names[i],id,"제한",async()=>{
+      if(!confirm(names[i]+" 님의 사용을 제한할까요?\n(일정 데이터는 삭제되지 않고, 인원 1명이 줄어요)"))return;
+      const b=writeBatch(db);
+      b.delete(doc(db,"members",id));
+      b.set(doc(db,"blocked",id),{at:serverTimestamp()});
+      b.set(doc(db,"config","stats"),{count:ids.length-1});
+      try{await b.commit()}catch(e){setStatus("제한 실패: "+(e.code||"오류"))}
+      loadAdmin();
+    }));
+    if(!bids.length)bbox.textContent="제한된 계정이 없어요.";
+    bids.forEach((id,i)=>adminRow(bbox,bnames[i],id,"해제",async()=>{
+      try{await deleteDoc(doc(db,"blocked",id))}catch(e){setStatus("해제 실패: "+(e.code||"오류"))}
+      loadAdmin();
+    }));
+  }catch(e){$("astat").textContent="불러오기 실패: "+(e.code||"오류")}
+}
+$("adm").onclick=()=>{$("amodal").classList.add("on");loadAdmin()};
+$("aclose").onclick=()=>$("amodal").classList.remove("on");
+$("amodal").onclick=e=>{if(e.target===$("amodal"))$("amodal").classList.remove("on")};
+$("amaxsave").onclick=async()=>{
+  const n=parseInt($("amax").value,10);
+  if(!(n>=1&&n<=1000)){$("astat").textContent="1~1000 사이의 숫자를 입력해 주세요.";return}
+  try{await setDoc(doc(db,"config","settings"),{maxUsers:n});await loadAdmin();$("astat").textContent+=" · 저장했어요 (이미 가입한 사용자는 유지되고, 새 가입만 제한돼요)"}
+  catch(e){$("astat").textContent="저장 실패: "+(e.code||"오류")}
+};
+/* ---------- 탈퇴 ---------- */
+async function leave(){
+  if(!db||!user||!member||isAdmin())return;
+  if(!confirm("탈퇴하면 내 일정과 이름이 모두 삭제되고 되돌릴 수 없어요.\n삭제하기 전에 백업 파일을 먼저 내려받아요.\n\n계속할까요?"))return;
+  if(prompt("확인을 위해 '탈퇴'를 입력해 주세요.")!=="탈퇴")return;
+  try{
+    setStatus("탈퇴 처리 중...");
+    const uid=user.uid;
+    const snap=await getDocs(collection(db,"users",uid,"months"));
+    const out={exportedAt:new Date().toISOString(),uid,name:pname,months:{}};
+    snap.forEach(d=>{const x=d.data();out.months[d.id]={events:x.events||{},expireAt:iso(x.expireAt)}});
+    saveJson(out,"calendar-withdraw-backup-");
+    for(const d of snap.docs)await deleteDoc(d.ref);
+    await deleteDoc(doc(db,"users",uid));
+    await runTransaction(db,async tx=>{
+      const cRef=doc(db,"config","stats");
+      const c=await tx.get(cRef);
+      tx.delete(doc(db,"members",uid));
+      tx.set(cRef,{count:Math.max(0,(c.exists()?c.data().count:1)-1)});
+    });
+    member=false;
+    let removed=false;
+    try{await deleteUser(auth.currentUser);removed=true}
+    catch(e){
+      if(e.code==="auth/requires-recent-login"){
+        try{await reauthenticateWithPopup(auth.currentUser,new GoogleAuthProvider());await deleteUser(auth.currentUser);removed=true}catch(e2){}
+      }
+    }
+    if(!removed)await signOut(auth);
+    alert("탈퇴가 완료됐어요. 내려받은 백업 파일은 잘 보관해 주세요."+(removed?"":"\n(로그인 계정 자체는 남아 있어요. 필요하면 구글 계정 설정에서 이 앱의 연결을 해제해 주세요.)"));
+  }catch(e){setStatus("탈퇴 실패: "+(e.code||e.message||"오류")+" — 일부만 삭제됐을 수 있어요. 다시 시도해 주세요.")}
+}
+$("leave").onclick=leave;
 function go(dm){m+=dm;if(m<0){m=11;y--}if(m>11){m=0;y++}subscribe()}
 $("prev").onclick=()=>go(-1);$("next").onclick=()=>go(1);
 $("today").onclick=()=>{y=now.getFullYear();m=now.getMonth();subscribe()};
