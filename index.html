@@ -94,7 +94,7 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
     <label id="bwrap" style="margin-left:12px"><input type="checkbox" id="sbase"> 출시일 표시</label></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v15)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v16)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -126,27 +126,25 @@ import {getFirestore,doc,onSnapshot,setDoc,collection,query,where,limit,getDocs,
 import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged,deleteUser,reauthenticateWithPopup} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 /* ▼▼▼ Firebase 콘솔 > 프로젝트 설정 > 내 앱(웹)의 설정값으로 교체하세요 ▼▼▼ */
-const firebaseConfig = {
-  apiKey: "AIzaSyB5Djj8sw_P6P07KMHnWefdkJ14DJ7sskg",
-  authDomain: "calendar-1-ecf45.firebaseapp.com",
-  projectId: "calendar-1-ecf45",
-  storageBucket: "calendar-1-ecf45.firebasestorage.app",
-  messagingSenderId: "328951865340",
-  appId: "1:328951865340:web:5aac388de4d7895aa91c79"
+const firebaseConfig={
+  apiKey:"YOUR_API_KEY",
+  authDomain:"YOUR_PROJECT.firebaseapp.com",
+  projectId:"YOUR_PROJECT",
+  appId:"YOUR_APP_ID"
 };
 /* ▲▲▲ */
 
 const TYPES={off:"휴방",plan:"일정",show:"공연·극장",etc:"기타"};
 const DOW=["월","화","수","목","금","토","일"];
 const configured=!firebaseConfig.apiKey.startsWith("YOUR_");
-let db=null,auth=null,user=null,cleaned=false,member=false,joinMsg="",pUnsub=null,pname="",plisted=false,bUnsub=null,baseWork=[],baseData={},showBase=true,unsub=null,y,m,data={},editing=null,work=[];
+let db=null,auth=null,user=null,cleaned=false,member=false,joinMsg="",ownerUid=null,pUnsub=null,pname="",plisted=false,bUnsub=null,baseWork=[],baseData={},showBase=true,unsub=null,y,m,data={},editing=null,work=[];
 const now=new Date();y=now.getFullYear();m=now.getMonth();
 const $=id=>document.getElementById(id);
 const kind=(t,c)=>/휴식|휴방/.test(t)?"off":(c==="off"||c==="show"?"plan":(c||"plan"));
-/* ▼ 출시 일정을 편집할 관리자 UID를 넣으세요 (로그인 후 '링크 복사' 주소의 ?u= 뒤 값) */
-const ADMIN_UIDS=['HidZYZcXBtfgR31GQijZJ6eJvF62'];
+/* 소유자는 첫 로그인 때 화면에서 등록해요. 소유자 외에 관리자를 더 두고 싶을 때만 UID를 넣으세요 ('링크 복사' 주소의 ?u= 뒤 값). 규칙의 listedAdmins()에도 같은 값을 넣어야 해요. */
+const ADMIN_UIDS=[];
 const DEFAULT_MAX=20; // 관리자가 바꾸기 전 기본 최대 가입 인원(관리자 제외)
-const isAdmin=()=>!!user&&ADMIN_UIDS.includes(user.uid);
+const isAdmin=()=>!!user&&(ADMIN_UIDS.includes(user.uid)||ownerUid===user.uid);
 const BTYPES={game:"게임",event:"이벤트",gear:"장비"};
 const BICON={game:"🎮",event:"🎉",gear:"🖥️"};
 const expTs=()=>Timestamp.fromDate(new Date(y+EXP_YEARS,m+1,1)); // 해당 월이 끝나고 6년 뒤 만료
@@ -162,7 +160,7 @@ const canWrite=()=>!configured||(active()&&target()===user.uid);
 if(configured){
   const app=initializeApp(firebaseConfig);
   db=getFirestore(app);auth=getAuth(app);
-  onAuthStateChanged(auth,async u=>{user=u;member=false;joinMsg="";$("login").textContent=u?"로그아웃":"로그인";if(!u)cleaned=false;if(u)await checkMember();updateBtns();subscribe();subProfile();cleanup()});
+  onAuthStateChanged(auth,async u=>{user=u;member=false;joinMsg="";ownerUid=null;$("login").textContent=u?"로그아웃":"로그인";if(!u)cleaned=false;if(u){await loadOwner();await checkMember()}updateBtns();subscribe();subProfile();cleanup()});
 }else{$("login").style.display="none";$("find").style.display="none";$("bwrap").style.display="none"}
 
 function updateBtns(){
@@ -479,6 +477,20 @@ $("bkmenu").addEventListener("click",closeMenu);
 document.addEventListener("click",e=>{if(!$("bkwrap").contains(e.target))closeMenu()});
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeMenu()});
 /* ---------- 가입 인원 제한 ---------- */
+async function loadOwner(){
+  ownerUid=null;
+  if(!db||!user)return;
+  try{
+    const o=await getDoc(doc(db,"config","owner"));
+    if(o.exists()){ownerUid=o.data().uid;return}
+    const eligible=ADMIN_UIDS.length===0||ADMIN_UIDS.includes(user.uid);
+    if(!eligible)return;
+    if(confirm("아직 이 캘린더의 소유자(관리자)가 등록되어 있지 않아요.\n이 계정을 소유자로 등록할까요?\n\n※ 사이트를 만든 본인만 '확인'을 눌러 주세요. 한 번 등록하면 다른 사람은 등록할 수 없어요.")){
+      await setDoc(doc(db,"config","owner"),{uid:user.uid,at:serverTimestamp()});
+      ownerUid=user.uid;
+    }
+  }catch(e){}
+}
 async function checkMember(){
   member=false;joinMsg="";
   if(!db||!user||isAdmin())return;
