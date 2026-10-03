@@ -18,9 +18,9 @@ firestore의 저장용량이 여유가 있다면 6년이 지난 일정도 복구
 
 설정 방법.
 1. [console.firebase.google.com](console.firebase.google.com)에서 프로젝트 추가를 누르고 Google 애널리틱스는 꺼도 됩니다.
-2. 프로젝트 개요에서 </>(웹) 아이콘을 눌러 앱을 등록합니다. 호스팅 설정은 체크하지 않아도 됩니다. 화면에 나오는 firebaseConfig 값(apiKey, authDomain, projectId, appId)을 HTML 파일 위쪽의 같은 자리에 붙여 넣습니다.
+2. 프로젝트 개요에서 </>(웹) 아이콘을 눌러 앱을 등록합니다. 호스팅 설정은 체크하지 않아도 됩니다. 화면에 나오는 firebaseConfig 값(apiKey, authDomain, projectId, appId)을 firebase-config.js에 붙여 넣고 저장합니다.
 3. Firestore Database > 데이터베이스 만들기에서 위치는 asia-northeast3(서울)을 추천합니다. 모드는 아무거나 골라도 됩니다.
-4. Firestore의 규칙 탭에 Firestore_rules.txt 의 내용을 붙여넣어요.
+4. Firestore의 규칙 탭에 Firestore_rules.txt 의 내용을 붙여넣습니다.
 5. Authentication > 시작하기 > Google을 사용 설정으로 바꾸고 저장합니다.
 6. Authentication > 설정 > 승인된 도메인에 사이트 주소(예: 내아이디.github.io)를 추가합니다. 이 단계를 빼면 로그인 팝업이 오류로 막힙니다.
 7. GitHub Pages 등에 calendar-firebase.html을 index.html로 이름을 바꿔서 올립니다. 
