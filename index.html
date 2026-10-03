@@ -94,7 +94,7 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
     <label id="bwrap" style="margin-left:12px"><input type="checkbox" id="sbase"> 출시일 표시</label></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v16)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v17)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -125,26 +125,21 @@ import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase
 import {getFirestore,doc,onSnapshot,setDoc,collection,query,where,limit,getDocs,getDoc,deleteDoc,runTransaction,serverTimestamp,writeBatch,Timestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged,deleteUser,reauthenticateWithPopup} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-/* ▼▼▼ Firebase 콘솔 > 프로젝트 설정 > 내 앱(웹)의 설정값으로 교체하세요 ▼▼▼ */
-const firebaseConfig = {
-  apiKey: "AIzaSyB5Djj8sw_P6P07KMHnWefdkJ14DJ7sskg",
-  authDomain: "calendar-1-ecf45.firebaseapp.com",
-  projectId: "calendar-1-ecf45",
-  storageBucket: "calendar-1-ecf45.firebasestorage.app",
-  messagingSenderId: "328951865340",
-  appId: "1:328951865340:web:5aac388de4d7895aa91c79"
-};
-/* ▲▲▲ */
+/* Firebase 설정은 같은 폴더의 firebase-config.js에서 불러와요 */
+let firebaseConfig={apiKey:"YOUR_API_KEY"},ADMIN_UIDS=[],configError="";
+try{
+  const mod=await import("./firebase-config.js");
+  if(mod.firebaseConfig)firebaseConfig=mod.firebaseConfig;
+  if(Array.isArray(mod.ADMIN_UIDS))ADMIN_UIDS=mod.ADMIN_UIDS;
+}catch(e){configError="firebase-config.js를 불러오지 못했어요"}
 
 const TYPES={off:"휴방",plan:"일정",show:"공연·극장",etc:"기타"};
 const DOW=["월","화","수","목","금","토","일"];
-const configured=!firebaseConfig.apiKey.startsWith("YOUR_");
+const configured=!String(firebaseConfig.apiKey||"YOUR_").startsWith("YOUR_");
 let db=null,auth=null,user=null,cleaned=false,member=false,joinMsg="",ownerUid=null,pUnsub=null,pname="",plisted=false,bUnsub=null,baseWork=[],baseData={},showBase=true,unsub=null,y,m,data={},editing=null,work=[];
 const now=new Date();y=now.getFullYear();m=now.getMonth();
 const $=id=>document.getElementById(id);
 const kind=(t,c)=>/휴식|휴방/.test(t)?"off":(c==="off"||c==="show"?"plan":(c||"plan"));
-/* 소유자는 첫 로그인 때 화면에서 등록해요. 소유자 외에 관리자를 더 두고 싶을 때만 UID를 넣으세요 ('링크 복사' 주소의 ?u= 뒤 값). 규칙의 listedAdmins()에도 같은 값을 넣어야 해요. */
-const ADMIN_UIDS=[];
 const DEFAULT_MAX=20; // 관리자가 바꾸기 전 기본 최대 가입 인원(관리자 제외)
 const isAdmin=()=>!!user&&(ADMIN_UIDS.includes(user.uid)||ownerUid===user.uid);
 const BTYPES={game:"게임",event:"이벤트",gear:"장비"};
@@ -233,7 +228,7 @@ function render(){
     }
     g.appendChild(c);
   }
-  if(!configured)setStatus("Firebase 설정 전이라 저장되지 않는 미리보기 상태입니다.");
+  if(!configured)setStatus(configError?configError+" — index.html과 같은 폴더에 firebase-config.js가 있는지, 웹 서버(호스팅)로 열었는지 확인해 주세요.":"Firebase 설정 전이라 저장되지 않는 미리보기 상태입니다.");
   else if(!target())setStatus("로그인하면 나만의 캘린더가 만들어져요. 링크를 받았다면 그 링크로 접속하세요.");
   else if(user&&!active()&&target()===user.uid)setStatus(joinMsg||"가입 확인 중...");
   else if(!canWrite())setStatus("다른 사람의 캘린더입니다. (보기 전용)");
