@@ -2,11 +2,67 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function signedIn() { return request.auth != null; }
+    function isAdmin() { return signedIn() && request.auth.uid in ['관리자UID']; }
+    function isMember(uid) {
+      return exists(/databases/$(database)/documents/members/$(uid));
+    }
+    function canUse(uid) {
+      return signedIn() && request.auth.uid == uid && (isAdmin() || isMember(uid));
+    }
+    function maxUsers() {
+      return exists(/databases/$(database)/documents/config/settings)
+        ? get(/databases/$(database)/documents/config/settings).data.maxUsers : 20;
+    }
+    function oldCount() {
+      return exists(/databases/$(database)/documents/config/stats)
+        ? get(/databases/$(database)/documents/config/stats).data.count : 0;
+    }
+
+    // ---- 인원 제한 ----
+    match /config/settings {
+      allow read: if true;
+      allow write: if isAdmin()
+        && request.resource.data.keys().hasOnly(['maxUsers'])
+        && request.resource.data.maxUsers is int
+        && request.resource.data.maxUsers >= 1
+        && request.resource.data.maxUsers <= 1000;
+    }
+    match /config/stats {
+      allow read: if true;
+      allow create, update: if signedIn()
+        && request.resource.data.keys().hasOnly(['count'])
+        && request.resource.data.count is int
+        && request.resource.data.count >= 0
+        && (isAdmin()
+            || (request.resource.data.count == oldCount() + 1
+                && !exists(/databases/$(database)/documents/members/$(request.auth.uid))
+                && existsAfter(/databases/$(database)/documents/members/$(request.auth.uid))));
+    }
+    match /members/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if signedIn() && request.auth.uid == uid
+        && !exists(/databases/$(database)/documents/blocked/$(uid))
+        && request.resource.data.keys().hasOnly(['joinedAt'])
+        && request.resource.data.joinedAt == request.time
+        && getAfter(/databases/$(database)/documents/config/stats).data.count == oldCount() + 1
+        && getAfter(/databases/$(database)/documents/config/stats).data.count <= maxUsers();
+      allow delete: if isAdmin();
+    }
+    match /blocked/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['at']);
+      allow delete: if isAdmin();
+    }
+
+    // ---- 사용자 프로필 ----
     match /users/{uid} {
       allow get: if true;
       allow list: if resource.data.listed == true;
-      allow write: if request.auth != null
-        && request.auth.uid == uid
+      allow write: if canUse(uid)
         && request.resource.data.keys().hasOnly(['name','listed'])
         && request.resource.data.name is string
         && request.resource.data.name.size() >= 1
@@ -15,30 +71,29 @@ service cloud.firestore {
             || request.resource.data.listed is bool);
     }
 
+    // ---- 개인 일정 ----
     match /users/{uid}/months/{month} {
       allow read: if true;
-      allow create, update: if request.auth != null
-        && request.auth.uid == uid
+      allow create, update: if canUse(uid)
         && month.matches('[0-9]{4}-[0-9]{2}')
         && request.resource.data.keys().hasOnly(['events','expireAt'])
         && request.resource.data.events is map
         && request.resource.data.events.size() <= 31
         && (!('expireAt' in request.resource.data)
             || request.resource.data.expireAt is timestamp);
-      allow delete: if request.auth != null && request.auth.uid == uid;
+      allow delete: if canUse(uid);
     }
 
+    // ---- 출시 일정 (관리자만) ----
     match /base/{month} {
       allow read: if true;
-      allow create, update: if request.auth != null
-        && request.auth.uid in ['관리자 UID']
+      allow create, update: if isAdmin()
         && month.matches('[0-9]{4}-[0-9]{2}')
         && request.resource.data.keys().hasOnly(['events','expireAt'])
         && request.resource.data.events is map
         && (!('expireAt' in request.resource.data)
             || request.resource.data.expireAt is timestamp);
-      allow delete: if request.auth != null
-        && request.auth.uid in ['관리자 UID'];
+      allow delete: if isAdmin();
     }
   }
 }
