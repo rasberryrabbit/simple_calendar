@@ -10,7 +10,9 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/config/owner).data.uid == request.auth.uid;
     }
     function isAdmin() {
-      return signedIn() && (isOwner() || request.auth.uid in listedAdmins());
+      return signedIn() && (isOwner()
+        || request.auth.uid in listedAdmins()
+        || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
     }
     function isMember(uid) {
       return exists(/databases/$(database)/documents/members/$(uid));
@@ -40,6 +42,16 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['uid','at'])
         && request.resource.data.uid is string;
       allow delete: if false;
+    }
+
+    // ---- 관리자 목록 (소유자만 변경) ----
+    match /admins/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isOwner()
+        && request.resource.data.keys().hasOnly(['at'])
+        && request.resource.data.at == request.time;
+      allow delete: if isOwner();
     }
 
     // ---- 인원 제한 ----
