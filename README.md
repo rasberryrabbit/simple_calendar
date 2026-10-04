@@ -30,7 +30,7 @@ firestore의 저장용량이 여유가 있다면 6년이 지난 일정도 복구
 10. 일정관리 페이지에 처음 로그인을 하면 관리자로 설정할 것인지 메시지가 뜨는데 확인을 누릅니다. 소유자는 1명이 반드시 있어야 합니다. 기본 최대 사용자 인원은 20명입니다. 관리자가 바꿀 수 있습니다. 처음 관리자 이외에 더 관리자를 UID로 넣을 수 있습니다.
   
 (선택) App Check 설정 방법.
-1. reCAPTCHA v3 키 만들기 : (google.com/recaptcha/admin)[google.com/recaptcha/admin] 에서 새 사이트를 생성. 유형은 V3이고, 도메인 주소는 "내아이디.github.io"와 같은 방법으로 값을 입력합니다. 그렇게 하면 사이트 키와 비밀 키가 나옵니다.
+1. reCAPTCHA v3 키 만들기 : [google.com/recaptcha/admin](google.com/recaptcha/admin) 에서 새 사이트를 생성. 유형은 V3이고, 도메인 주소는 "내아이디.github.io"와 같은 방법으로 값을 입력합니다. 그렇게 하면 사이트 키와 비밀 키가 나옵니다.
 2. Firebase에 등록 : Firebase 콘솔 App Check > 앱 탭에서 웹 앱을 골라 reCAPTCHA 공급자를 선택하고, 위에서 받은 비밀 키를 붙여 넣습니다.
 3. 사이트 키 넣기: firebase-config.js의 APP_CHECK_SITE_KEY에 사이트 키를 넣습니다. 비밀 키는 이 파일에 넣으면 안됩니다.
   
