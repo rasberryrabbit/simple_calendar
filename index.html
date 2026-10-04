@@ -89,12 +89,13 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
     </span>
     <input type="file" id="rfile" accept=".json,application/json" hidden>
     <button id="adm" style="display:none">사용자 관리</button>
+    <label id="pwrap" style="display:none"><input type="checkbox" id="priv"> 나만 보기(비공개)</label>
     <label id="lwrap" style="display:none"><input type="checkbox" id="listed"> 다른 사람이 찾을 수 있게 노출</label>
     <select class="pal" id="pal" title="색상 테마" aria-label="색상 테마"><option value="">기본(자동)</option><option value="pink">핑크</option><option value="pastel">파스텔</option><option value="ocean">바다</option><option value="forest">숲</option><option value="sunset">석양</option><option value="contrast">고대비</option><option value="night">야간</option></select>
     <label id="bwrap" style="margin-left:12px"><input type="checkbox" id="sbase"> 출시일 표시</label></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v20)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v21)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -139,7 +140,7 @@ try{
 const TYPES={off:"휴방",plan:"일정",show:"공연·극장",etc:"기타"};
 const DOW=["월","화","수","목","금","토","일"];
 const configured=!String(firebaseConfig.apiKey||"YOUR_").startsWith("YOUR_");
-let db=null,auth=null,user=null,cleaned=false,member=false,joinMsg="",myRole="",pUnsub=null,pname="",plisted=false,bUnsub=null,baseWork=[],baseData={},showBase=true,unsub=null,y,m,data={},editing=null,work=[];
+let db=null,auth=null,user=null,cleaned=false,member=false,joinMsg="",myRole="",pUnsub=null,pname="",plisted=false,pprivate=false,bUnsub=null,baseWork=[],baseData={},showBase=true,unsub=null,y,m,data={},editing=null,work=[];
 const now=new Date();y=now.getFullYear();m=now.getMonth();
 const $=id=>document.getElementById(id);
 const kind=(t,c)=>/휴식|휴방/.test(t)?"off":(c==="off"||c==="show"?"plan":(c||"plan"));
@@ -179,17 +180,20 @@ function updateBtns(){
 }
 function subProfile(){
   if(pUnsub){pUnsub();pUnsub=null}
-  pname="";plisted=false;
+  pname="";plisted=false;pprivate=false;
   const t=target();
   if(!db||!t){renderOwner();return}
-  pUnsub=onSnapshot(doc(db,"users",t),s=>{pname=(s.exists()&&s.data().name)||"";plisted=!!(s.exists()&&s.data().listed);renderOwner()},()=>renderOwner());
+  pUnsub=onSnapshot(doc(db,"users",t),s=>{pname=(s.exists()&&s.data().name)||"";plisted=!!(s.exists()&&s.data().listed);pprivate=!!(s.exists()&&s.data().private);renderOwner()},()=>renderOwner());
 }
 function renderOwner(){
   const t=target(),mine=active()&&t===user.uid;
-  $("oname").textContent=!t?"":(pname?pname+"님의 캘린더":(mine?"표시할 이름을 설정해 주세요":"이름 없는 캘린더"));
+  $("oname").textContent=(!t?"":(pname?pname+"님의 캘린더":(mine?"표시할 이름을 설정해 주세요":"이름 없는 캘린더")))+(t&&pprivate?" 🔒":"");
   $("rename").style.display=mine?"":"none";
   $("rename").textContent=pname?"이름 변경":"이름 설정";
   $("lwrap").style.display=mine?"":"none";
+  $("pwrap").style.display=mine?"":"none";
+  $("priv").checked=pprivate;
+  $("listed").disabled=pprivate;
   $("bkwrap").style.display=mine?"":"none";
   const canLeave=mine&&member&&!isAdmin();
   $("leave").style.display=$("leavehr").style.display=canLeave?"":"none";
@@ -210,7 +214,7 @@ function subscribe(){
   if(!db||!t){render();return}
   unsub=onSnapshot(doc(db,"users",t,"months",mkey()),
     s=>{data=(s.exists()&&s.data().events)||{};render()},
-    e=>setStatus("불러오기 실패: "+e.code));
+    e=>{data={};render();setStatus(e.code==="permission-denied"&&!(user&&user.uid===t)?"비공개 캘린더예요. 주인만 볼 수 있어요.":"불러오기 실패: "+e.code)});
 }
 function render(){
   renderOwner();
@@ -315,9 +319,14 @@ $("login").onclick=async()=>{
   try{user?await signOut(auth):await signInWithPopup(auth,new GoogleAuthProvider())}
   catch(e){setStatus("로그인 실패: "+e.code)}
 };
+$("priv").onchange=async()=>{
+  const v=$("priv").checked;
+  try{await setDoc(doc(db,"users",user.uid),v?{private:true,listed:false}:{private:false},{merge:true})}
+  catch(e){$("priv").checked=!v;setStatus("설정 저장 실패: "+(e.code||"오류"))}
+};
 $("link").onclick=async()=>{
   const url=location.origin+location.pathname+"?u="+user.uid;
-  try{await navigator.clipboard.writeText(url);setStatus("링크를 복사했어요: "+url)}
+  try{await navigator.clipboard.writeText(url);setStatus(pprivate?"링크를 복사했지만 지금은 비공개 상태라 다른 사람은 볼 수 없어요. '나만 보기'를 끄면 공유돼요.":"링크를 복사했어요: "+url)}
   catch(e){prompt("이 링크를 복사해서 공유하세요",url)}
 };
 $("mine").onclick=()=>{location.href=location.pathname};
