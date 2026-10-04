@@ -3,22 +3,20 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
-    function listedAdmins() { return []; }
-    function isOwner() {
-      return signedIn()
-        && exists(/databases/$(database)/documents/config/owner)
-        && get(/databases/$(database)/documents/config/owner).data.uid == request.auth.uid;
+    function myMember() {
+      return /databases/$(database)/documents/members/$(request.auth.uid);
+    }
+    function role() {
+      return get(myMember()).data.get('role', 'member');
     }
     function isAdmin() {
-      return signedIn() && (isOwner()
-        || request.auth.uid in listedAdmins()
-        || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+      return signedIn() && exists(myMember()) && role() in ['admin', 'owner'];
     }
-    function isMember(uid) {
-      return exists(/databases/$(database)/documents/members/$(uid));
+    function isOwner() {
+      return signedIn() && exists(myMember()) && role() == 'owner';
     }
     function canUse(uid) {
-      return signedIn() && request.auth.uid == uid && (isAdmin() || isMember(uid));
+      return signedIn() && request.auth.uid == uid && exists(myMember());
     }
     function maxUsers() {
       return exists(/databases/$(database)/documents/config/settings)
@@ -29,29 +27,15 @@ service cloud.firestore {
         ? get(/databases/$(database)/documents/config/stats).data.count : 0;
     }
 
-    // ---- 소유자 ----
+    // ---- 소유자 등록 (처음 한 번만 만들 수 있음) ----
     match /config/owner {
       allow read: if signedIn();
       allow create: if signedIn()
         && !exists(/databases/$(database)/documents/config/owner)
         && request.resource.data.keys().hasOnly(['uid','at'])
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.at == request.time
-        && (listedAdmins().size() == 0 || request.auth.uid in listedAdmins());
-      allow update: if isOwner()
-        && request.resource.data.keys().hasOnly(['uid','at'])
-        && request.resource.data.uid is string;
-      allow delete: if false;
-    }
-
-    // ---- 관리자 목록 (소유자만 변경) ----
-    match /admins/{uid} {
-      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
-      allow list: if isAdmin();
-      allow create: if isOwner()
-        && request.resource.data.keys().hasOnly(['at'])
         && request.resource.data.at == request.time;
-      allow delete: if isOwner();
+      allow update, delete: if false;
     }
 
     // ---- 인원 제한 ----
@@ -77,15 +61,39 @@ service cloud.firestore {
                 && exists(/databases/$(database)/documents/members/$(request.auth.uid))
                 && !existsAfter(/databases/$(database)/documents/members/$(request.auth.uid))));
     }
+
+    // ---- 가입 정보 (역할 포함) ----
     match /members/{uid} {
       allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
       allow list: if isAdmin();
+
+      // 일반 가입 (role 없음)
       allow create: if signedIn() && request.auth.uid == uid
         && !exists(/databases/$(database)/documents/blocked/$(uid))
         && request.resource.data.keys().hasOnly(['joinedAt'])
         && request.resource.data.joinedAt == request.time
         && getAfter(/databases/$(database)/documents/config/stats).data.count == oldCount() + 1
         && getAfter(/databases/$(database)/documents/config/stats).data.count <= maxUsers();
+
+      // 소유자 본인 등록·복구 (config/owner 가 내 UID일 때만)
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['joinedAt','role'])
+        && request.resource.data.role == 'owner'
+        && getAfter(/databases/$(database)/documents/config/owner).data.uid == request.auth.uid;
+
+      // 소유자가 다른 사용자를 관리자로 새로 지정
+      allow create: if isOwner() && uid != request.auth.uid
+        && request.resource.data.keys().hasOnly(['joinedAt','role'])
+        && request.resource.data.role == 'admin'
+        && request.resource.data.joinedAt == request.time;
+
+      // 소유자가 관리자 지정/해제 (role만 변경 가능, 소유자 문서는 변경 불가)
+      allow update: if isOwner() && uid != request.auth.uid
+        && resource.data.get('role', 'member') != 'owner'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role'])
+        && request.resource.data.role in ['admin', 'member'];
+
+      // 관리자 또는 본인(탈퇴)
       allow delete: if isAdmin() || (signedIn() && request.auth.uid == uid);
     }
     match /blocked/{uid} {
