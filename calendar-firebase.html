@@ -95,7 +95,7 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
     <label id="bwrap" style="margin-left:12px"><input type="checkbox" id="sbase"> 출시일 표시</label></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v21)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v23)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -122,11 +122,11 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
   <div class="sub">관리자</div>
   <div id="aadmins"></div>
   <div class="row" id="aaddrow" style="display:none"><input id="auid" placeholder="추가할 사용자의 UID"><button id="aadd">추가</button></div>
-  <div class="acts"><button id="aclose">닫기</button></div>
+  <div class="acts"><button id="arefresh">새로고침</button><button id="aclose">닫기</button></div>
 </div></div>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {getFirestore,doc,onSnapshot,setDoc,collection,query,where,limit,getDocs,getDoc,deleteDoc,runTransaction,serverTimestamp,writeBatch,Timestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getFirestore,doc,onSnapshot,setDoc,collection,query,where,limit,documentId,deleteField,getDocs,getDoc,deleteDoc,runTransaction,serverTimestamp,writeBatch,Timestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged,deleteUser,reauthenticateWithPopup} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 /* Firebase 설정은 같은 폴더의 firebase-config.js에서 불러와요 */
@@ -297,21 +297,23 @@ function drawRows(){
 $("add").onclick=()=>{work.push({id:Math.random().toString(36).slice(2,9),t:"",c:"plan"});drawRows();const i=$("rows").querySelectorAll("input");i[i.length-1].focus()};
 $("cancel").onclick=()=>$("modal").classList.remove("on");
 $("modal").onclick=e=>{if(e.target===$("modal"))$("modal").classList.remove("on")};
+const sameList=(a,b)=>JSON.stringify((a||[]).map(x=>[x.id,x.t,x.c]))===JSON.stringify((b||[]).map(x=>[x.id,x.t,x.c]));
 $("save").onclick=async()=>{
-  const d=editing,mk=mkey();
+  const d=editing,mk=mkey(),key=dkey(d);
   $("modal").classList.remove("on");
   try{
+    /* 바뀐 날짜 하나만 병합(merge)해서 써요. 다른 날짜는 건드리지 않아요 */
     if(canWrite()){
       const list=work.filter(x=>x.t.trim()).map(x=>({id:x.id,t:x.t.trim(),c:kind(x.t,x.c)}));
-      const ev={...data};
-      if(list.length)ev[dkey(d)]=list;else delete ev[dkey(d)];
-      if(!db){data=ev;render()}else await setDoc(doc(db,"users",user.uid,"months",mk),{events:ev,expireAt:expTs()});
+      if(!sameList(list,data[key])){
+        if(!db){const ev={...data};if(list.length)ev[key]=list;else delete ev[key];data=ev;render()}
+        else await setDoc(doc(db,"users",user.uid,"months",mk),{events:{[key]:list.length?list:deleteField()},expireAt:expTs()},{merge:true});
+      }
     }
     if(db&&isAdmin()){
       const bl=baseWork.filter(x=>x.t.trim()).map(x=>({id:x.id,t:x.t.trim(),c:x.c}));
-      const bev={...baseData};
-      if(bl.length)bev[dkey(d)]=bl;else delete bev[dkey(d)];
-      await setDoc(doc(db,"base",mk),{events:bev,expireAt:expTs()});
+      if(!sameList(bl,baseData[key]))
+        await setDoc(doc(db,"base",mk),{events:{[key]:bl.length?bl:deleteField()},expireAt:expTs()},{merge:true});
     }
   }catch(e){setStatus(e.code==="permission-denied"?"저장 권한이 없는 계정입니다.":"저장 실패: "+(e.code||"오류"))}
 };
@@ -377,16 +379,25 @@ function saveJson(obj,prefix){
 }
 const EXP_YEARS=6;
 const isExpired=id=>{const m=/^(\d{4})-(\d{2})$/.exec(id);return !!m&&new Date(+m[1]+EXP_YEARS,+m[2],1)<=new Date()};
+function cutoffId(){
+  const n=new Date(),T=(n.getFullYear()-EXP_YEARS)*12+n.getMonth();
+  const Y=Math.floor((T-1)/12),M=T-Y*12;
+  return String(Y).padStart(4,"0")+"-"+pad(M);
+}
 async function cleanup(){
   if(!db||!user||cleaned||!active())return;
   if(viewUid&&viewUid!==user.uid)return;
   cleaned=true;
   try{
     const items=[];
-    const own=await getDocs(collection(db,"users",user.uid,"months"));
+    /* 하루에 한 번만, 만료된 달만 조회해서 읽기 횟수를 줄여요 */
+    const dayKey=new Date().toISOString().slice(0,10);
+    try{if(localStorage.getItem("clean:"+user.uid)===dayKey)return;localStorage.setItem("clean:"+user.uid,dayKey)}catch(e){}
+    const cut=cutoffId();
+    const own=await getDocs(query(collection(db,"users",user.uid,"months"),where(documentId(),"<=",cut)));
     own.forEach(d=>{if(isExpired(d.id))items.push({kind:"months",id:d.id,events:d.data().events||{},path:["users",user.uid,"months",d.id]})});
     if(isAdmin()){
-      const b=await getDocs(collection(db,"base"));
+      const b=await getDocs(query(collection(db,"base"),where(documentId(),"<=",cut)));
       b.forEach(d=>{if(isExpired(d.id))items.push({kind:"base",id:d.id,events:d.data().events||{},path:["base",d.id]})});
     }
     if(!items.length)return;
@@ -554,87 +565,112 @@ function adminRow(box,name,id,actions){
   box.appendChild(row);
 }
 const statsRef=()=>doc(db,"config","stats");
-async function loadAdmin(){
+const NAME_TTL=24*60*60*1000;
+const readNameCache=()=>{try{return JSON.parse(localStorage.getItem("nameCache")||"{}")}catch(e){return {}}};
+async function namesFor(ids,force,prune){
+  const c=readNameCache(),now=Date.now(),out={},need=[];
+  ids.forEach(id=>{const e=c[id];if(!force&&e&&now-e.t<NAME_TTL)out[id]=e.n;else need.push(id)});
+  await Promise.all(need.map(async id=>{const n=await nameOf(id);out[id]=n;c[id]={n,t:now}}));
+  if(prune)Object.keys(c).forEach(k=>{if(!ids.includes(k))delete c[k]});
+  if(need.length||prune){try{localStorage.setItem("nameCache",JSON.stringify(c))}catch(e){}}
+  return out;
+}
+let adm=null;
+const admCount=()=>adm.people.filter(p=>p.role==="member").length;
+function renderAdmin(){
+  if(!adm)return;
+  const owner=isOwnerUser(),nm=id=>adm.names[id]||"이름 없음";
+  const owners=adm.people.filter(p=>p.role==="owner"),admins=adm.people.filter(p=>p.role==="admin"),members=adm.people.filter(p=>p.role==="member");
+  $("amax").value=adm.max;
+  $("astat").textContent="가입 "+members.length+"명 / 최대 "+adm.max+"명 (소유자·관리자는 인원에 포함되지 않아요)";
+  const box=$("alist"),bbox=$("ablock"),abox=$("aadmins");box.innerHTML="";bbox.innerHTML="";abox.innerHTML="";
+  if(!members.length)box.textContent="아직 가입한 사용자가 없어요.";
+  members.forEach(p=>{
+    const acts=[];
+    if(owner)acts.push(["관리자 지정",async()=>{
+      if(!confirm(nm(p.id)+" 님을 관리자로 지정할까요?\n출시 일정 편집, 사용자 제한 등을 할 수 있게 돼요."))return;
+      const b=writeBatch(db);
+      b.set(doc(db,"members",p.id),{role:"admin"},{merge:true});
+      b.set(statsRef(),{count:Math.max(0,admCount()-1)});
+      try{await b.commit();p.role="admin";renderAdmin()}catch(e){setStatus("지정 실패: "+(e.code||"오류"))}
+    }]);
+    acts.push(["제한",async()=>{
+      if(!confirm(nm(p.id)+" 님의 사용을 제한할까요?\n(일정 데이터는 삭제되지 않고, 인원 1명이 줄어요)"))return;
+      const b=writeBatch(db);
+      b.delete(doc(db,"members",p.id));
+      b.set(doc(db,"blocked",p.id),{at:serverTimestamp()});
+      b.set(statsRef(),{count:Math.max(0,admCount()-1)});
+      try{await b.commit();adm.people=adm.people.filter(x=>x.id!==p.id);adm.bids.push(p.id);renderAdmin()}catch(e){setStatus("제한 실패: "+(e.code||"오류"))}
+    }]);
+    adminRow(box,nm(p.id),p.id,acts);
+  });
+  if(!adm.bids.length)bbox.textContent="제한된 계정이 없어요.";
+  adm.bids.forEach(id=>adminRow(bbox,nm(id),id,[["해제",async()=>{
+    try{await deleteDoc(doc(db,"blocked",id));adm.bids=adm.bids.filter(x=>x!==id);renderAdmin()}catch(e){setStatus("해제 실패: "+(e.code||"오류"))}
+  }]]));
+  owners.forEach(p=>adminRow(abox,"👑 소유자 "+nm(p.id),p.id,[]));
+  admins.forEach(p=>adminRow(abox,nm(p.id),p.id,owner?[["해제",async()=>{
+    if(!confirm(nm(p.id)+" 님의 관리자 권한을 해제할까요?"))return;
+    const b=writeBatch(db);
+    b.set(doc(db,"members",p.id),{role:"member"},{merge:true});
+    b.set(statsRef(),{count:admCount()+1});
+    try{await b.commit();p.role="member";renderAdmin()}catch(e){setStatus("해제 실패: "+(e.code||"오류"))}
+  }]]:[]));
+  $("aaddrow").style.display=owner?"":"none";
+}
+async function loadAdmin(force){
   $("astat").textContent="불러오는 중...";
-  const owner=isOwnerUser();
   try{
     const [s,ms,bs,c]=await Promise.all([getDoc(doc(db,"config","settings")),getDocs(collection(db,"members")),getDocs(collection(db,"blocked")),getDoc(statsRef())]);
     const max=s.exists()?s.data().maxUsers:DEFAULT_MAX;
-    const people=[];ms.forEach(d=>people.push({id:d.id,role:d.data().role||"member"}));
-    const owners=people.filter(p=>p.role==="owner"),admins=people.filter(p=>p.role==="admin"),members=people.filter(p=>p.role==="member");
-    const bids=[];bs.forEach(d=>bids.push(d.id));
-    const cnt=members.length;
+    const people=[],bids=[];
+    ms.forEach(d=>people.push({id:d.id,role:d.data().role||"member"}));
+    bs.forEach(d=>bids.push(d.id));
+    const cnt=people.filter(p=>p.role==="member").length;
     if(!c.exists()||c.data().count!==cnt)await setDoc(statsRef(),{count:cnt});
-    $("amax").value=max;
-    $("astat").textContent="가입 "+cnt+"명 / 최대 "+max+"명 (소유자·관리자는 인원에 포함되지 않아요)";
-    const box=$("alist"),bbox=$("ablock"),abox=$("aadmins");box.innerHTML="";bbox.innerHTML="";abox.innerHTML="";
-    const nm=list=>Promise.all(list.map(x=>nameOf(x.id||x)));
-    const [mn,bn,an,on]=await Promise.all([nm(members),nm(bids),nm(admins),nm(owners)]);
-    if(!members.length)box.textContent="아직 가입한 사용자가 없어요.";
-    members.forEach((p,i)=>{
-      const acts=[];
-      if(owner)acts.push(["관리자 지정",async()=>{
-        if(!confirm(mn[i]+" 님을 관리자로 지정할까요?\n출시 일정 편집, 사용자 제한 등을 할 수 있게 돼요."))return;
-        const b=writeBatch(db);
-        b.set(doc(db,"members",p.id),{role:"admin"},{merge:true});
-        b.set(statsRef(),{count:Math.max(0,cnt-1)});
-        try{await b.commit()}catch(e){setStatus("지정 실패: "+(e.code||"오류"))}
-        loadAdmin();
-      }]);
-      acts.push(["제한",async()=>{
-        if(!confirm(mn[i]+" 님의 사용을 제한할까요?\n(일정 데이터는 삭제되지 않고, 인원 1명이 줄어요)"))return;
-        const b=writeBatch(db);
-        b.delete(doc(db,"members",p.id));
-        b.set(doc(db,"blocked",p.id),{at:serverTimestamp()});
-        b.set(statsRef(),{count:Math.max(0,cnt-1)});
-        try{await b.commit()}catch(e){setStatus("제한 실패: "+(e.code||"오류"))}
-        loadAdmin();
-      }]);
-      adminRow(box,mn[i],p.id,acts);
-    });
-    if(!bids.length)bbox.textContent="제한된 계정이 없어요.";
-    bids.forEach((id,i)=>adminRow(bbox,bn[i],id,[["해제",async()=>{
-      try{await deleteDoc(doc(db,"blocked",id))}catch(e){setStatus("해제 실패: "+(e.code||"오류"))}
-      loadAdmin();
-    }]]));
-    owners.forEach((p,i)=>adminRow(abox,"👑 소유자 "+on[i],p.id,[]));
-    admins.forEach((p,i)=>adminRow(abox,an[i],p.id,owner?[["해제",async()=>{
-      if(!confirm(an[i]+" 님의 관리자 권한을 해제할까요?"))return;
-      const b=writeBatch(db);
-      b.set(doc(db,"members",p.id),{role:"member"},{merge:true});
-      b.set(statsRef(),{count:cnt+1});
-      try{await b.commit()}catch(e){setStatus("해제 실패: "+(e.code||"오류"))}
-      loadAdmin();
-    }]]:[]));
-    $("aaddrow").style.display=owner?"":"none";
+    const names=await namesFor([...new Set([...people.map(p=>p.id),...bids])],force,true);
+    adm={uid:user.uid,at:Date.now(),max,people,bids,names};
+    renderAdmin();
   }catch(e){$("astat").textContent="불러오기 실패: "+(e.code||"오류")}
 }
 $("aadd").onclick=async()=>{
   const id=$("auid").value.trim();
+  if(!adm){return}
   if(!/^[A-Za-z0-9_-]{20,128}$/.test(id)){$("astat").textContent="UID 형식이 올바르지 않아요. 상대방의 '링크 복사' 주소에서 ?u= 뒤의 값을 붙여 넣어 주세요.";return}
   if(id===user.uid){$("astat").textContent="소유자는 이미 관리자예요.";return}
   try{
-    const ref=doc(db,"members",id),ex=await getDoc(ref);
-    if(ex.exists()){
-      const r=ex.data().role||"member";
-      if(r!=="member"){$("astat").textContent="이미 소유자 또는 관리자예요.";return}
-      const c=await getDoc(statsRef());
+    const ref=doc(db,"members",id),ex=adm.people.find(x=>x.id===id);
+    if(ex){
+      if(ex.role!=="member"){$("astat").textContent="이미 소유자 또는 관리자예요.";return}
       const b=writeBatch(db);
       b.set(ref,{role:"admin"},{merge:true});
-      b.set(statsRef(),{count:Math.max(0,(c.exists()?c.data().count:1)-1)});
-      await b.commit();
-    }else await setDoc(ref,{joinedAt:serverTimestamp(),role:"admin"});
-    $("auid").value="";await loadAdmin();
-  }catch(e){$("astat").textContent="추가 실패: "+(e.code||"오류")}
+      b.set(statsRef(),{count:Math.max(0,admCount()-1)});
+      await b.commit();ex.role="admin";
+    }else{
+      await setDoc(ref,{joinedAt:serverTimestamp(),role:"admin"});
+      adm.people.push({id,role:"admin"});
+    }
+    Object.assign(adm.names,await namesFor([id]));
+    $("auid").value="";renderAdmin();
+  }catch(e){$("astat").textContent="추가 실패: "+(e.code||"오류")+" (목록이 오래됐다면 새로고침을 눌러 주세요)"}
 };
-$("adm").onclick=()=>{$("amodal").classList.add("on");loadAdmin()};
+$("adm").onclick=()=>{
+  $("amodal").classList.add("on");
+  /* 5분 안에 다시 열면 이미 불러온 목록을 그대로 보여줘요 (읽기 0회) */
+  if(adm&&adm.uid===user.uid&&Date.now()-adm.at<5*60*1000)renderAdmin();else loadAdmin();
+};
+$("arefresh").onclick=()=>loadAdmin(true);
 $("aclose").onclick=()=>$("amodal").classList.remove("on");
 $("amodal").onclick=e=>{if(e.target===$("amodal"))$("amodal").classList.remove("on")};
 $("amaxsave").onclick=async()=>{
   const n=parseInt($("amax").value,10);
+  if(!adm)return;
   if(!(n>=1&&n<=1000)){$("astat").textContent="1~1000 사이의 숫자를 입력해 주세요.";return}
-  try{await setDoc(doc(db,"config","settings"),{maxUsers:n});await loadAdmin();$("astat").textContent+=" · 저장했어요 (이미 가입한 사용자는 유지되고, 새 가입만 제한돼요)"}
-  catch(e){$("astat").textContent="저장 실패: "+(e.code||"오류")}
+  try{
+    await setDoc(doc(db,"config","settings"),{maxUsers:n});
+    adm.max=n;renderAdmin();
+    $("astat").textContent+=" · 저장했어요 (이미 가입한 사용자는 유지되고, 새 가입만 제한돼요)";
+  }catch(e){$("astat").textContent="저장 실패: "+(e.code||"오류")}
 };
 /* ---------- 탈퇴 ---------- */
 async function leave(){
