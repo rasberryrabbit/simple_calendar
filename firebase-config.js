@@ -6,8 +6,3 @@ export const firebaseConfig = {
   projectId: "calendar-1-ecf45",
   appId: "1:328951865340:web:5aac388de4d7895aa91c79"
 };
-
-// (선택) 소유자 외에 관리자 기능을 쓸 계정의 UID 목록.
-// 로그인 후 '링크 복사' 주소에서 ?u= 뒤의 값이에요. 보안 규칙의 listedAdmins()에도 같은 값을 넣어야 해요.
-// 소유자만 있으면 비워 두세요.
-export const ADMIN_UIDS = [];
