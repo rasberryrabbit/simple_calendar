@@ -6,3 +6,7 @@ export const firebaseConfig = {
   projectId: "calendar-1-ecf45",
   appId: "1:328951865340:web:5aac388de4d7895aa91c79"
 };
+
+// (선택) App Check용 reCAPTCHA v3 "사이트 키"(공개 키). 비워 두면 App Check를 쓰지 않아요.
+// 비밀 키(secret)는 여기에 넣지 마세요. Firebase 콘솔 App Check 설정에만 넣어요.
+export const APP_CHECK_SITE_KEY = "";
