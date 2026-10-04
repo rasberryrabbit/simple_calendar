@@ -27,7 +27,7 @@ firestore의 저장용량이 여유가 있다면 6년이 지난 일정도 복구
 7. GitHub Pages 등에 calendar-firebase.html을 index.html로 이름을 바꿔서 올립니다. 
 8. [https://console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials)에서 Firebase가 자동으로 만든 키는 "Browser key (auto created by Firebase)"라는 이름으로 이 목록에 나옵니다. 그 키를 누릅니다.
 9. 애플리케이션 제한사항에서 웹사이트(HTTP 리퍼러)를 선택하고, "내GitHub이름.github.io/* " 와 "프로젝트ID.firebaseapp.com/* "를 추가합니다. (로그인 팝업이 이 주소를 쓰기 때문에 빼면 구글 로그인이 막힙니다)
-10. 일정관리 페이지에 처음 로그인을 하면 관리자로 설정할 것인지 메시지가 뜨는데 확인을 누릅니다. 1명은 항상 관리자가 있어야 합니다. 기본 최대 사용자 인원은 20명입니다. 관리자가 바꿀 수 있습니다. 처음 관리자 이외에 더 관리자를 UID로 넣을 수 있습니다. 추가 관리자는 firebase 규칙의 listedAdmins()의 대괄호 내부와 firebase-config.js의 ADMIN_UIDS의 대괄호 내부에 같이 입력해야 합니다.
+10. 일정관리 페이지에 처음 로그인을 하면 관리자로 설정할 것인지 메시지가 뜨는데 확인을 누릅니다. 소유자는 1명이 반드시 있어야 합니다. 기본 최대 사용자 인원은 20명입니다. 관리자가 바꿀 수 있습니다. 처음 관리자 이외에 더 관리자를 UID로 넣을 수 있습니다.
 
   
 출시일정만 입력한 스샷  
