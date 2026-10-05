@@ -38,7 +38,8 @@ firestore의 저장용량이 여유가 있다면 6년이 지난 일정도 복구
   
   
 출시일정만 입력한 스샷  
-<img width="1091" height="756" alt="스크린샷 2026-10-05 115747" src="https://github.com/user-attachments/assets/c73dcd14-fede-4898-ab94-3effcc98251f" />
+<img width="1092" height="760" alt="스크린샷 2026-10-05 195202" src="https://github.com/user-attachments/assets/f1d25b86-b30c-488f-924d-47d1408881e7" />
+
 
 
 
