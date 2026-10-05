@@ -10,3 +10,6 @@ export const firebaseConfig = {
 // (선택) App Check용 reCAPTCHA v3 "사이트 키"(공개 키). 비워 두면 App Check를 쓰지 않아요.
 // 비밀 키(secret)는 여기에 넣지 마세요. Firebase 콘솔 App Check 설정에만 넣어요.
 export const APP_CHECK_SITE_KEY = "6LeFDt4tAAAAAEpdsCSETIWuCRrhjfT9gEKmM5wH";
+
+// 키 종류: "enterprise"(기본) 또는 "v3"(예전에 만들어 둔 reCAPTCHA v3 키가 있을 때만)
+export const APP_CHECK_PROVIDER = "enterprise";
