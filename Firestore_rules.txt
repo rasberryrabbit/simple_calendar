@@ -131,25 +131,29 @@ service cloud.firestore {
     match /users/{uid} {
       allow get: if true;
       allow list: if resource.data.listed == true;
-      allow create, update: if
-        (canUse(uid)
-          && request.resource.data.keys().hasOnly(['name','listed','private'])
-          && (!('name' in request.resource.data)
-              || (request.resource.data.name is string
-                  && request.resource.data.name.size() >= 1
-                  && request.resource.data.name.size() <= 20))
-          && (!('listed' in request.resource.data) || request.resource.data.listed is bool)
-          && (!('private' in request.resource.data) || request.resource.data.private is bool)
-          && (request.resource.data.get('listed', false) == false
-              || 'name' in request.resource.data)
-          && !(request.resource.data.get('private', false) == true
-               && request.resource.data.get('listed', false) == true))
-        // 제한 중인 가입자는 이름만 남길 수 있어요
-        || (signedIn() && request.auth.uid == uid && exists(myMember())
-            && request.resource.data.keys().hasOnly(['name'])
-            && request.resource.data.name is string
-            && request.resource.data.name.size() >= 1
-            && request.resource.data.name.size() <= 20);
+
+      // 활성 가입자: 이름·노출·비공개 설정
+      allow create, update: if canUse(uid)
+        && request.resource.data.keys().hasOnly(['name','listed','private'])
+        && (!('name' in request.resource.data)
+            || (request.resource.data.name is string
+                && request.resource.data.name.size() >= 1
+                && request.resource.data.name.size() <= 20))
+        && (!('listed' in request.resource.data) || request.resource.data.listed is bool)
+        && (!('private' in request.resource.data) || request.resource.data.private is bool)
+        && (request.resource.data.get('listed', false) == false
+            || 'name' in request.resource.data)
+        && !(request.resource.data.get('private', false) == true
+             && request.resource.data.get('listed', false) == true);
+
+      // 제한 중인 가입자: 프로필이 아직 없을 때 이름을 한 번만 만들 수 있어요
+      allow create: if signedIn() && request.auth.uid == uid
+        && exists(myMember())
+        && request.resource.data.keys().hasOnly(['name'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 1
+        && request.resource.data.name.size() <= 20;
+
       allow delete: if canUse(uid);
     }
 
