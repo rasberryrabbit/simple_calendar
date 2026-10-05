@@ -95,7 +95,7 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
     <label id="bwrap" style="margin-left:12px"><input type="checkbox" id="sbase"> 출시일 표시</label></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v25)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v26)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -514,13 +514,14 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape")closeMenu()});
 /* ---------- 가입 인원 제한 ---------- */
 function watchMe(){
   if(mUnsub){mUnsub();mUnsub=null}
-  if(!db||!user||!member)return;
+  if(!db||!user||!member||myStatus!=="restricted")return;
   mUnsub=onSnapshot(doc(db,"members",user.uid),sn=>{
     if(!sn.exists())return;
     const d=sn.data(),st=d.status||"active",rl=d.role||"member";
     if(st===myStatus&&rl===myRole)return;
     myStatus=st;myRole=rl;joinMsg=st==="active"?"":RESTRICT_MSG;
     updateBtns();subscribe();subProfile();render();
+    if(st==="active"&&mUnsub){mUnsub();mUnsub=null}   /* 승인되면 감시를 끝내 읽기를 아껴요 */
   },()=>{});
 }
 async function loadMe(){
@@ -532,8 +533,13 @@ async function loadMe(){
     if(m.exists()){
       member=true;myRole=m.data().role||"member";myStatus=m.data().status||"active";if(myStatus!=="active")joinMsg=RESTRICT_MSG;
       if(myRole==="member"){
-        const o=await getDoc(oRef);
-        if(o.exists()&&o.data().uid===user.uid){await setDoc(mRef,{role:"owner",status:"active"},{merge:true});myRole="owner";myStatus="active";joinMsg=""}
+        const ck="oc:"+user.uid;let last=0;
+        try{last=+localStorage.getItem(ck)||0}catch(e){}
+        if(Date.now()-last>30*24*3600*1000){
+          const o=await getDoc(oRef);
+          try{localStorage.setItem(ck,String(Date.now()))}catch(e){}
+          if(o.exists()&&o.data().uid===user.uid){await setDoc(mRef,{role:"owner",status:"active"},{merge:true});myRole="owner";myStatus="active";joinMsg=""}
+        }
       }
       return;
     }
