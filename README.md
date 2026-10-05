@@ -35,7 +35,13 @@ firestore의 저장용량이 여유가 있다면 6년이 지난 일정도 복구
 1. reCAPTCHA v3 키 만들기 : [google.com/recaptcha/admin](https://google.com/recaptcha/admin) 에서 새 사이트를 생성. 유형은 V3이고, 도메인 주소는 "내아이디.github.io"와 같은 방법으로 값을 입력합니다. 그렇게 하면 사이트 키와 비밀 키가 나옵니다.
 2. Firebase에 등록 : Firebase 콘솔 App Check > 앱 탭에서 웹 앱을 골라 reCAPTCHA 공급자를 선택하고, 위에서 받은 비밀 키를 붙여 넣습니다.
 3. 사이트 키 넣기: firebase-config.js의 APP_CHECK_SITE_KEY에 사이트 키를 넣습니다. 비밀 키는 이 파일에 넣으면 안됩니다.
-  
+
+사용자 규칙.  
+사용자가 가입을 하면 '제한' 상태가 됩니다. 관리자가 승인을 해야 일정을 쓸 수 있습니다.  
+사용자가 차단이 되면 차단된 사용자의 일정을 소유자(관리자 아님)는 확인할 수 있고, 삭제할 수 있습니다.  
+차단된 사용자의 일정은 바로 삭제되지 않고 일정 링크에는 내용이 표시되지 않습니다.  
+일시적으로 사용자의 쓰기를 막기 위해서는 '제한'을 사용하는 것이 이상적입니다.  
+
   
 출시일정만 입력한 스샷  
 <img width="1086" height="758" alt="스크린샷 2026-10-05 204944" src="https://github.com/user-attachments/assets/2284824e-557b-4329-a49c-626ad900c3b4" />
