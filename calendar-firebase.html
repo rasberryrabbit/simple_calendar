@@ -95,7 +95,7 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
     <label id="bwrap" style="margin-left:12px"><input type="checkbox" id="sbase"> 출시일 표시</label></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v23)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v24)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -130,11 +130,12 @@ import {getFirestore,doc,onSnapshot,setDoc,collection,query,where,limit,document
 import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged,deleteUser,reauthenticateWithPopup} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 /* Firebase 설정은 같은 폴더의 firebase-config.js에서 불러와요 */
-let firebaseConfig={apiKey:"YOUR_API_KEY"},appCheckKey="",configError="";
+let firebaseConfig={apiKey:"YOUR_API_KEY"},appCheckKey="",appCheckProvider="enterprise",configError="";
 try{
   const mod=await import("./firebase-config.js");
   if(mod.firebaseConfig)firebaseConfig=mod.firebaseConfig;
   if(typeof mod.APP_CHECK_SITE_KEY==="string")appCheckKey=mod.APP_CHECK_SITE_KEY.trim();
+  if(typeof mod.APP_CHECK_PROVIDER==="string")appCheckProvider=mod.APP_CHECK_PROVIDER.trim().toLowerCase();
 }catch(e){configError="firebase-config.js를 불러오지 못했어요"}
 
 const TYPES={off:"휴방",plan:"일정",show:"공연·극장",etc:"기타"};
@@ -165,8 +166,10 @@ if(configured){
   if(appCheckKey){
     try{
       if(["localhost","127.0.0.1"].includes(location.hostname))self.FIREBASE_APPCHECK_DEBUG_TOKEN=true;
-      const {initializeAppCheck,ReCaptchaV3Provider}=await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js");
-      initializeAppCheck(app,{provider:new ReCaptchaV3Provider(appCheckKey),isTokenAutoRefreshEnabled:true});
+      const ac=await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js");
+      /* 기본은 reCAPTCHA Enterprise 키. 예전에 만든 v3 키가 있으면 APP_CHECK_PROVIDER="v3" */
+      const Provider=appCheckProvider==="v3"?ac.ReCaptchaV3Provider:ac.ReCaptchaEnterpriseProvider;
+      ac.initializeAppCheck(app,{provider:new Provider(appCheckKey),isTokenAutoRefreshEnabled:true});
     }catch(e){console.warn("App Check를 시작하지 못했어요. 보호 없이 계속합니다.",e)}
   }
   db=getFirestore(app);auth=getAuth(app);
