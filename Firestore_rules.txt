@@ -20,11 +20,14 @@ service cloud.firestore {
     function canUse(uid) {
       return signedIn() && request.auth.uid == uid && isActive();
     }
-    // 대상(u)이 '차단된 일반 가입자'인지
+    // 대상(u)이 '차단된 일반 가입자'인지: 차단 기록이 있고 가입 문서가 없거나,
+    // 예전 방식(가입 문서의 status가 blocked)
     function isBlockedUid(u) {
-      return exists(/databases/$(database)/documents/members/$(u))
-        && get(/databases/$(database)/documents/members/$(u)).data.get('role', 'member') == 'member'
-        && get(/databases/$(database)/documents/members/$(u)).data.get('status', 'active') == 'blocked';
+      return (exists(/databases/$(database)/documents/blocked/$(u))
+              && !exists(/databases/$(database)/documents/members/$(u)))
+        || (exists(/databases/$(database)/documents/members/$(u))
+            && get(/databases/$(database)/documents/members/$(u)).data.get('role', 'member') == 'member'
+            && get(/databases/$(database)/documents/members/$(u)).data.get('status', 'active') == 'blocked');
     }
     function isPrivate(u) {
       return exists(/databases/$(database)/documents/users/$(u))
@@ -82,6 +85,7 @@ service cloud.firestore {
       allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
       allow list: if isAdmin();
 
+      // 일반 가입: 항상 '제한(restricted)' 상태로 시작
       allow create: if signedIn() && request.auth.uid == uid
         && !exists(/databases/$(database)/documents/blocked/$(uid))
         && request.resource.data.keys().hasOnly(['joinedAt','status'])
@@ -90,28 +94,43 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/config/stats).data.count == oldCount() + 1
         && getAfter(/databases/$(database)/documents/config/stats).data.count <= maxUsers();
 
+      // 관리자·소유자의 차단 해제(복원): 같은 요청에서 차단 기록을 지우고 사용 가능 상태로 만들어요
+      allow create: if isAdmin() && uid != request.auth.uid
+        && exists(/databases/$(database)/documents/blocked/$(uid))
+        && !existsAfter(/databases/$(database)/documents/blocked/$(uid))
+        && request.resource.data.keys().hasOnly(['joinedAt','status'])
+        && request.resource.data.status == 'active'
+        && request.resource.data.joinedAt == request.time
+        && getAfter(/databases/$(database)/documents/config/stats).data.count == oldCount() + 1;
+
+      // 소유자 본인 등록·복구 (config/owner 가 내 UID일 때만, 상태는 active만)
       allow create, update: if signedIn() && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['joinedAt','role','status'])
         && request.resource.data.role == 'owner'
         && request.resource.data.get('status', 'active') == 'active'
         && getAfter(/databases/$(database)/documents/config/owner).data.uid == request.auth.uid;
 
+      // 소유자가 다른 사용자를 관리자로 새로 지정
       allow create: if isOwner() && uid != request.auth.uid
         && request.resource.data.keys().hasOnly(['joinedAt','role'])
         && request.resource.data.role == 'admin'
         && request.resource.data.joinedAt == request.time;
 
+      // 소유자가 관리자 지정/해제 (role·status만 변경, 소유자 문서는 변경 불가)
       allow update: if isOwner() && uid != request.auth.uid
         && resource.data.get('role', 'member') != 'owner'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role','status'])
         && request.resource.data.get('role', 'member') in ['admin', 'member']
         && request.resource.data.get('status', 'active') in ['active', 'restricted', 'blocked'];
 
+      // 관리자·소유자가 일반 가입자의 제한 설정/해제 (status만 변경)
       allow update: if isAdmin() && uid != request.auth.uid
         && resource.data.get('role', 'member') == 'member'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && request.resource.data.status in ['active', 'restricted', 'blocked'];
 
+      // 삭제: 관리자는 일반 가입자만, 소유자는 본인 외 누구나,
+      // 본인 탈퇴는 일반 가입자 중 예전 방식 차단 상태가 아닐 때만
       allow delete: if
         (isAdmin() && resource.data.get('role', 'member') == 'member')
         || (isOwner() && uid != request.auth.uid)
@@ -120,16 +139,17 @@ service cloud.firestore {
             && resource.data.get('status', 'active') != 'blocked');
     }
 
-    // ---- 재가입 차단 기록 (이름은 알아보기 위한 선택 값) ----
+    // ---- 차단 기록 (이름·삭제 여부는 알아보기 위한 선택 값) ----
     match /blocked/{uid} {
       allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
       allow list: if isAdmin();
       allow create, update: if isAdmin()
-        && request.resource.data.keys().hasOnly(['at','name'])
+        && request.resource.data.keys().hasOnly(['at','name','purged'])
         && (!('name' in request.resource.data)
             || (request.resource.data.name is string
                 && request.resource.data.name.size() >= 1
-                && request.resource.data.name.size() <= 20));
+                && request.resource.data.name.size() <= 20))
+        && (!('purged' in request.resource.data) || request.resource.data.purged is bool);
       allow delete: if isAdmin();
     }
 
