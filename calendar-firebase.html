@@ -141,7 +141,7 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
   </div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v35)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v36)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -985,7 +985,14 @@ $("sbase").onchange=()=>{showBase=$("sbase").checked;try{localStorage.setItem("s
   document.getElementById("tclose").onclick=close;
   modal.onclick=e=>{if(e.target===modal)close()};
 })();
-function syncChips(){document.querySelectorAll(".chip").forEach(l=>{const c=l.querySelector("input[type=checkbox]");if(c)l.classList.toggle("on",c.checked);l.classList.toggle("dis",c.disabled)})}
+function syncChips(){
+  document.querySelectorAll(".chip").forEach(l=>{
+    const c=l.querySelector("input[type=checkbox]");
+    if(!c)return;   /* 테마 선택·편집 버튼처럼 체크박스가 없는 칩은 건너뛰어요 */
+    l.classList.toggle("on",c.checked);
+    l.classList.toggle("dis",c.disabled);
+  });
+}
 document.addEventListener("change",syncChips);
 syncChips();
 render();subscribe();subProfile();

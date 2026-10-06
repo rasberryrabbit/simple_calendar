@@ -358,7 +358,14 @@ addEventListener("drop",async e=>{e.preventDefault();document.body.classList.rem
   document.getElementById("tclose").onclick=close;
   modal.onclick=e=>{if(e.target===modal)close()};
 })();
-function syncChips(){document.querySelectorAll(".chip").forEach(l=>{const c=l.querySelector("input[type=checkbox]");if(c)l.classList.toggle("on",c.checked);l.classList.toggle("dis",c.disabled)})}
+function syncChips(){
+  document.querySelectorAll(".chip").forEach(l=>{
+    const c=l.querySelector("input[type=checkbox]");
+    if(!c)return;   /* 테마 선택·편집 버튼처럼 체크박스가 없는 칩은 건너뛰어요 */
+    l.classList.toggle("on",c.checked);
+    l.classList.toggle("dis",c.disabled);
+  });
+}
 document.addEventListener("change",syncChips);
 syncChips();
 refresh();
