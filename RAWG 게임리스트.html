@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>이번 달 게임 출시 일정</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f6f9;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-top: 0;
+        }
+        .input-section {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #status {
+            text-align: center;
+            margin: 20px 0;
+            font-weight: bold;
+            color: #555;
+        }
+        .error {
+            color: #d9534f;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        li {
+            background-color: #f9f9f9;
+            border-left: 4px solid #007bff;
+            margin-bottom: 10px;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .game-date {
+            color: #d9534f;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .game-name {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .game-info {
+            margin-top: 5px;
+            color: #666;
+            font-size: 0.95em;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🎮 이번 달 게임 출시 일정</h1>
+    
+    <div class="input-section">
+        <input type="text" id="apiKeyInput" placeholder="RAWG API 키를 입력하세요. (rawg.io/apidocs에서 발급)">
+        <button onclick="fetchGames()">불러오기</button>
+    </div>
+
+    <div id="status">데이터를 불러오려면 API 키를 입력하고 버튼을 눌러주세요.</div>
+    
+    <ul id="gameList"></ul>
+</div>
+
+<script>
+    async function fetchGames() {
+        const apiKey = document.getElementById('apiKeyInput').value.trim();
+        const statusDiv = document.getElementById('status');
+        const gameList = document.getElementById('gameList');
+        
+        if (!apiKey) {
+            statusDiv.innerHTML = '<p class="error">⚠️ API 키를 먼저 입력해주세요!</p>';
+            return;
+        }
+
+        // 오늘 날짜 기준으로 이번 달 계산 (브라우저의 시간을 따름)
+        const today = new Date(); 
+        const year = today.getFullYear();
+        const month = today.getMonth() + 1; // 0~11이므로 +1
+        
+        // 이번 달의 마지막 날 계산
+        const lastDay = new Date(year, month, 0).getDate();
+        
+        // YYYY-MM-DD 포맷팅
+        const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+        const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+        statusDiv.innerHTML = `⏳ ${year}년 ${month}월 출시 일정을 불러오는 중...`;
+        gameList.innerHTML = ''; // 기존 목록 초기화
+
+        const url = `https://api.rawg.io/api/games?key=${apiKey}&dates=${startDate},${endDate}&ordering=released&page_size=100`;
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error('API 요청 실패. API 키를 확인하세요.');
+            }
+            const data = await response.json();
+            const games = data.results;
+
+            if (games.length === 0) {
+                statusDiv.innerHTML = `🔍 ${year}년 ${month}월에 출시 예정인 게임 데이터를 찾을 수 없습니다.`;
+                return;
+            }
+
+            statusDiv.innerHTML = `✅ 총 ${games.length}개의 게임이 검색되었습니다. (${year}년 ${month}월 기준)`;
+
+            games.forEach(game => {
+                const releaseDate = game.released || '미정';
+                const name = game.name || '알 수 없음';
+                
+                // 장르 처리
+                const genres = game.genres.map(g => g.name).join(', ') || '미분류';
+                // 플랫폼 처리
+                const platforms = game.platforms ? game.platforms.map(p => p.platform.name).join(', ') : '미정';
+
+                // HTML 요소 생성
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <div>
+                        <span class="game-date">[${releaseDate}]</span>
+                        <span class="game-name">${name}</span>
+                    </div>
+                    <div class="game-info">
+                        장르: ${genres} <br>
+                        플랫폼: ${platforms}
+                    </div>
+                `;
+                gameList.appendChild(li);
+            });
+
+        } catch (error) {
+            statusDiv.innerHTML = `<p class="error">❌ 오류 발생: ${error.message}</p>`;
+        }
+    }
+</script>
+
+</body>
+</html>
