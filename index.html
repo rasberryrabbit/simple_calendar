@@ -95,7 +95,7 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
     <label id="bwrap" style="margin-left:12px"><input type="checkbox" id="sbase"> 출시일 표시</label></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v28)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v30)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -119,8 +119,9 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
   <div id="arestr"></div>
   <div class="sub">가입한 사용자</div>
   <div id="alist"></div>
-  <div class="sub">차단된 계정</div>
-  <div id="ablock"></div>
+  <details id="adet"><summary class="sub" style="cursor:pointer">차단된 계정 (<span id="acnt">펼쳐서 확인</span>)</summary>
+    <div id="ablock"></div>
+  </details>
   <div class="sub">관리자</div>
   <div id="aadmins"></div>
   <div class="row" id="aaddrow" style="display:none"><input id="auid" placeholder="추가할 사용자의 UID"><button id="aadd">추가</button></div>
@@ -143,7 +144,7 @@ try{
 const TYPES={off:"휴방",plan:"일정",show:"공연·극장",etc:"기타"};
 const DOW=["월","화","수","목","금","토","일"];
 const configured=!String(firebaseConfig.apiKey||"YOUR_").startsWith("YOUR_");
-let db=null,auth=null,user=null,cleaned=false,member=false,joinMsg="",myRole="",myStatus="",mUnsub=null,pUnsub=null,pname="",plisted=false,pprivate=false,bUnsub=null,baseWork=[],baseData={},showBase=true,unsub=null,y,m,data={},editing=null,work=[];
+let db=null,auth=null,user=null,cleaned=false,member=false,joinMsg="",myRole="",myStatus="",blockedSelf=false,mUnsub=null,pUnsub=null,pname="",plisted=false,pprivate=false,bUnsub=null,baseWork=[],baseData={},showBase=true,unsub=null,y,m,data={},editing=null,work=[];
 const now=new Date();y=now.getFullYear();m=now.getMonth();
 const $=id=>document.getElementById(id);
 const kind=(t,c)=>/휴식|휴방/.test(t)?"off":(c==="off"||c==="show"?"plan":(c||"plan"));
@@ -517,18 +518,28 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape")closeMenu()});
 /* ---------- 가입 인원 제한 ---------- */
 function watchMe(){
   if(mUnsub){mUnsub();mUnsub=null}
-  if(!db||!user||!member||myStatus==="active")return;
-  mUnsub=onSnapshot(doc(db,"members",user.uid),sn=>{
+  if(!db||!user)return;
+  if(member?myStatus==="active":!blockedSelf)return;
+  mUnsub=onSnapshot(doc(db,"members",user.uid),async sn=>{
+    if(!member){
+      /* 차단돼 있다가 해제(복원)되면 가입 문서가 다시 생겨요 */
+      if(sn.exists()){
+        if(mUnsub){mUnsub();mUnsub=null}
+        await loadMe();watchMe();
+        updateBtns();subscribe();subProfile();render();
+      }
+      return;
+    }
     if(!sn.exists())return;
     const d=sn.data(),st=d.status||"active",rl=d.role||"member";
     if(st===myStatus&&rl===myRole)return;
     myStatus=st;myRole=rl;joinMsg=statusMsg(st);
     updateBtns();subscribe();subProfile();render();
-    if(st==="active"&&mUnsub){mUnsub();mUnsub=null}   /* 승인되면 감시를 끝내 읽기를 아껴요 */
+    if(st==="active"&&mUnsub){mUnsub();mUnsub=null}   /* 사용 가능해지면 감시를 끝내 읽기를 아껴요 */
   },()=>{});
 }
 async function loadMe(){
-  myRole="";myStatus="";member=false;joinMsg="";
+  myRole="";myStatus="";member=false;joinMsg="";blockedSelf=false;
   if(!db||!user)return;
   const mRef=doc(db,"members",user.uid),oRef=doc(db,"config","owner");
   try{
@@ -576,7 +587,7 @@ async function joinMember(){
     });
     member=true;myRole="member";myStatus="restricted";joinMsg=RESTRICT_MSG;joined=true;
   }catch(e){
-    if(e.code==="blocked")joinMsg="사용이 제한된 계정이에요. 지금은 다른 사람의 캘린더를 보기만 할 수 있어요.";
+    if(e.code==="blocked"){joinMsg=BLOCK_MSG;blockedSelf=true}
     else if(e.code==="full"||e.code==="permission-denied")joinMsg="가입 가능 인원이 가득 찼어요. 지금은 다른 사람의 캘린더를 보기만 할 수 있어요. 관리자에게 문의해 주세요.";
     else joinMsg="가입 처리 실패: "+(e.code||"오류");
   }
@@ -606,6 +617,7 @@ async function namesFor(ids,force,prune){
   ids.forEach(id=>{const e=c[id];if(!force&&e&&now-e.t<NAME_TTL)out[id]=e.n;else need.push(id)});
   await Promise.all(need.map(async id=>{const n=await nameOf(id);out[id]=n;c[id]={n,t:now}}));
   if(prune)Object.keys(c).forEach(k=>{if(!ids.includes(k))delete c[k]});
+  Object.keys(c).forEach(k=>{if(now-c[k].t>30*24*3600*1000)delete c[k]});
   if(need.length||prune){try{localStorage.setItem("nameCache",JSON.stringify(c))}catch(e){}}
   return out;
 }
@@ -615,36 +627,24 @@ async function setUserStatus(p,st){
   try{await setDoc(doc(db,"members",p.id),{status:st},{merge:true});p.status=st;renderAdmin()}
   catch(e){setStatus("변경 실패: "+(e.code||"오류"))}
 }
-/* 차단: 가입 정보는 지우지 않고 상태만 'blocked'로 바꿔요. 인원에서는 빠지고, 해제하면 바로 복원돼요 */
+/* 차단: 가입 정보는 '차단 기록'으로 옮겨 보관해요(일정·이름은 그대로). 인원에서 빠지고, 해제하면 바로 복원돼요 */
 function banAction(p,name){
   return ["차단",async()=>{
-    if(!confirm(name+" 님을 차단할까요?\n(일정과 가입 정보는 그대로 보관되고, 인원 1명이 줄어요. 해제하면 바로 사용 가능 상태로 복원돼요)"))return;
-    const b=writeBatch(db);
-    b.set(doc(db,"members",p.id),{status:"blocked"},{merge:true});
-    b.set(statsRef(),{count:Math.max(0,admCount()-1)});
-    try{await b.commit();p.status="blocked";renderAdmin()}catch(e){setStatus("차단 실패: "+(e.code||"오류"))}
-  }];
-}
-/* 소유자 전용: 차단된 계정의 일정·프로필·가입 정보를 완전히 지우고, 같은 계정의 재가입은 막아 둬요 */
-async function purgeUser(p){
-  const name=adm.names[p.id]||"이름 없음";
-  if(!confirm(name+" 님의 일정, 이름, 가입 정보를 완전히 삭제할까요?\n되돌릴 수 없고, 백업 파일도 만들지 않아요.\n삭제 후에는 이 계정의 재가입이 차단돼요."))return;
-  if(prompt("확인을 위해 '삭제'를 입력해 주세요.")!=="삭제")return;
-  try{
-    setStatus("삭제 중...");
-    const snap=await getDocs(collection(db,"users",p.id,"months"));
-    const refs=snap.docs.map(d=>d.ref);
-    for(let i=0;i<refs.length;i+=5)await Promise.all(refs.slice(i,i+5).map(r=>deleteDoc(r)));
-    await deleteDoc(doc(db,"users",p.id));
+    if(!confirm(name+" 님을 차단할까요?\n(일정은 그대로 보관되고 인원 1명이 줄어요. 해제하면 바로 사용 가능 상태로 복원돼요)"))return;
     const nm0=name==="이름 없음"?"":name.slice(0,20);
     const b=writeBatch(db);
-    b.delete(doc(db,"members",p.id));
     b.set(doc(db,"blocked",p.id),nm0?{at:serverTimestamp(),name:nm0}:{at:serverTimestamp()});
-    await b.commit();
-    adm.people=adm.people.filter(x=>x.id!==p.id);adm.bids.push(p.id);adm.bnames[p.id]=nm0;
-    renderAdmin();setStatus("완전히 삭제했어요 (일정 "+refs.length+"개월분).");
-  }catch(e){setStatus("삭제 실패: "+(e.code||e.message||"오류")+" — 일부만 삭제됐을 수 있어요. 다시 시도해 주세요.")}
+    b.delete(doc(db,"members",p.id));
+    b.set(statsRef(),{count:Math.max(0,admCount()-1)});
+    try{
+      await b.commit();
+      adm.people=adm.people.filter(x=>x.id!==p.id);
+      if(adm.bloaded)adm.brecs[p.id]={name:nm0,purged:false};
+      renderAdmin();
+    }catch(e){setStatus("차단 실패: "+(e.code||"오류"))}
+  }];
 }
+/* 예전 방식(가입 문서에 status=blocked)으로 차단된 계정의 해제 */
 async function unblockUser(p){
   if(admCount()>=adm.max){setStatus("인원이 가득 차서 복원할 수 없어요. 최대 인원을 늘리거나 자리를 비워 주세요.");return}
   const b=writeBatch(db);
@@ -652,15 +652,72 @@ async function unblockUser(p){
   b.set(statsRef(),{count:admCount()+1});
   try{await b.commit();p.status="active";renderAdmin()}catch(e){setStatus("해제 실패: "+(e.code||"오류"))}
 }
+/* 차단 기록 해제: 가입 문서를 사용 가능 상태로 다시 만들어서 바로 복원해요 */
+async function unblockRecord(id){
+  if(admCount()>=adm.max){setStatus("인원이 가득 차서 복원할 수 없어요. 최대 인원을 늘리거나 자리를 비워 주세요.");return}
+  const r=adm.brecs[id]||{};
+  const b=writeBatch(db);
+  b.delete(doc(db,"blocked",id));
+  b.set(doc(db,"members",id),{joinedAt:serverTimestamp(),status:"active"});
+  b.set(statsRef(),{count:admCount()+1});
+  try{
+    await b.commit();
+    adm.people.push({id,role:"member",status:"active"});
+    if(r.name&&!adm.names[id])adm.names[id]=r.name;
+    delete adm.brecs[id];renderAdmin();
+  }catch(e){setStatus("해제 실패: "+(e.code||"오류"))}
+}
+/* 삭제된 계정의 재가입 차단만 풀기 (다시 로그인해서 새로 가입해야 해요) */
+async function releaseRecord(id){
+  try{await deleteDoc(doc(db,"blocked",id));delete adm.brecs[id];renderAdmin()}
+  catch(e){setStatus("해제 실패: "+(e.code||"오류"))}
+}
+/* 소유자 전용: 차단된 계정의 일정·프로필·가입 정보를 완전히 지우고, 같은 계정의 재가입은 막아 둬요 */
+async function purgeAccount(id,isMemberDoc){
+  const rec=adm.brecs[id]||{};
+  const name=rec.name||adm.names[id]||"이름 없음";
+  if(!confirm(name+" 님의 일정, 이름, 가입 정보를 완전히 삭제할까요?\n되돌릴 수 없고, 백업 파일도 만들지 않아요.\n삭제 후에는 이 계정의 재가입이 차단돼요."))return;
+  if(prompt("확인을 위해 '삭제'를 입력해 주세요.")!=="삭제")return;
+  try{
+    setStatus("삭제 중...");
+    const snap=await getDocs(collection(db,"users",id,"months"));
+    const refs=snap.docs.map(d=>d.ref);
+    for(let i=0;i<refs.length;i+=5)await Promise.all(refs.slice(i,i+5).map(r=>deleteDoc(r)));
+    await deleteDoc(doc(db,"users",id));
+    const nm0=name==="이름 없음"?"":name.slice(0,20);
+    const b=writeBatch(db);
+    if(isMemberDoc)b.delete(doc(db,"members",id));
+    b.set(doc(db,"blocked",id),nm0?{at:serverTimestamp(),name:nm0,purged:true}:{at:serverTimestamp(),purged:true});
+    await b.commit();
+    adm.people=adm.people.filter(x=>x.id!==id);
+    adm.brecs[id]={name:nm0,purged:true};
+    renderAdmin();setStatus("완전히 삭제했어요 (일정 "+refs.length+"개월분).");
+  }catch(e){setStatus("삭제 실패: "+(e.code||e.message||"오류")+" — 일부만 삭제됐을 수 있어요. 다시 시도해 주세요.")}
+}
+/* 차단 목록은 펼칠 때 처음 한 번만 읽어요 */
+async function loadBlocked(){
+  if(!adm)return;
+  $("ablock").textContent="불러오는 중...";
+  try{
+    const bs=await getDocs(collection(db,"blocked"));
+    adm.brecs={};
+    bs.forEach(d=>{const x=d.data();adm.brecs[d.id]={name:x.name||"",purged:!!x.purged}});
+    const miss=Object.keys(adm.brecs).filter(id=>!adm.brecs[id].name&&!adm.names[id]);
+    if(miss.length)Object.assign(adm.names,await namesFor(miss));
+    adm.bloaded=true;renderAdmin();
+  }catch(e){$("ablock").textContent="불러오기 실패: "+(e.code||"오류")}
+}
 function renderAdmin(){
   if(!adm)return;
   const owner=isOwnerUser(),nm=id=>adm.names[id]||"이름 없음";
   const owners=adm.people.filter(p=>p.role==="owner"),admins=adm.people.filter(p=>p.role==="admin"),members=adm.people.filter(p=>p.role==="member");
   const counted=members.filter(p=>p.status!=="blocked");
-  const restricted=members.filter(p=>p.status==="restricted"),actives=members.filter(p=>p.status==="active"||!p.status),blocked=members.filter(p=>p.status==="blocked");
+  const restricted=members.filter(p=>p.status==="restricted"),actives=members.filter(p=>p.status==="active"||!p.status),sblocked=members.filter(p=>p.status==="blocked");
+  const recIds=adm.bloaded?Object.keys(adm.brecs):[];
   $("amax").value=adm.max;
-  $("astat").textContent="가입 "+counted.length+"명 / 최대 "+adm.max+"명 · 제한 중(승인 대기) "+restricted.length+"명 · 차단 "+(blocked.length+adm.bids.length)+"명 (소유자·관리자·차단은 인원에 포함되지 않아요)";
+  $("astat").textContent="가입 "+counted.length+"명 / 최대 "+adm.max+"명 · 제한 중(승인 대기) "+restricted.length+"명 (소유자·관리자·차단은 인원에 포함되지 않아요)";
   $("adm").textContent="사용자 관리"+(restricted.length?" ("+restricted.length+")":"");
+  $("acnt").textContent=adm.bloaded?String(sblocked.length+recIds.length)+"명":(sblocked.length?sblocked.length+"명 이상, 펼치면 전체 표시":"펼쳐서 확인");
   const rbox=$("arestr"),box=$("alist"),bbox=$("ablock"),abox=$("aadmins");rbox.innerHTML="";box.innerHTML="";bbox.innerHTML="";abox.innerHTML="";
   if(!restricted.length)rbox.textContent="승인을 기다리는 사용자가 없어요.";
   restricted.forEach(p=>adminRow(rbox,nm(p.id),p.id,[["제한 해제",()=>setUserStatus(p,"active")],banAction(p,nm(p.id))]));
@@ -678,16 +735,19 @@ function renderAdmin(){
     acts.push(banAction(p,nm(p.id)));
     adminRow(box,nm(p.id),p.id,acts);
   });
-  if(!blocked.length&&!adm.bids.length)bbox.textContent="차단된 계정이 없어요.";
-  blocked.forEach(p=>{
+  /* 차단 영역 (접혀 있으면 화면에만 안 보이고, 기록은 펼칠 때 불러와요) */
+  sblocked.forEach(p=>{
     const acts=[["해제 (복원)",()=>unblockUser(p)]];
-    if(owner)acts.push(["완전 삭제",()=>purgeUser(p)]);
+    if(owner)acts.push(["완전 삭제",()=>purgeAccount(p.id,true)]);
     adminRow(bbox,nm(p.id),p.id,acts);
   });
-  /* 재가입 차단 목록(완전 삭제했거나 예전 방식으로 차단한 계정): 해제하면 다시 로그인해서 새로 가입해야 해요 */
-  adm.bids.forEach(id=>adminRow(bbox,(adm.bnames[id]||nm(id))+" (재가입 차단)",id,[["해제",async()=>{
-    try{await deleteDoc(doc(db,"blocked",id));adm.bids=adm.bids.filter(x=>x!==id);renderAdmin()}catch(e){setStatus("해제 실패: "+(e.code||"오류"))}
-  }]]));
+  recIds.forEach(id=>{
+    const r=adm.brecs[id];
+    const acts=r.purged?[["해제",()=>releaseRecord(id)]]:[["해제 (복원)",()=>unblockRecord(id)]];
+    if(owner&&!r.purged)acts.push(["완전 삭제",()=>purgeAccount(id,false)]);
+    adminRow(bbox,(r.name||nm(id))+(r.purged?" (삭제됨·재가입 차단)":""),id,acts);
+  });
+  if(adm.bloaded&&!sblocked.length&&!recIds.length)bbox.textContent="차단된 계정이 없어요.";
   owners.forEach(p=>adminRow(abox,"👑 소유자 "+nm(p.id),p.id,[]));
   admins.forEach(p=>adminRow(abox,nm(p.id),p.id,owner?[["해제",async()=>{
     if(!confirm(nm(p.id)+" 님의 관리자 권한을 해제할까요?"))return;
@@ -701,18 +761,20 @@ function renderAdmin(){
 async function loadAdmin(force){
   $("astat").textContent="불러오는 중...";
   try{
-    const [s,ms,bs,c]=await Promise.all([getDoc(doc(db,"config","settings")),getDocs(collection(db,"members")),getDocs(collection(db,"blocked")),getDoc(statsRef())]);
+    /* 차단 기록(blocked)은 여기서 읽지 않아요. 접힌 목록을 펼칠 때만 읽어요 */
+    const [s,ms,c]=await Promise.all([getDoc(doc(db,"config","settings")),getDocs(collection(db,"members")),getDoc(statsRef())]);
     const max=s.exists()?s.data().maxUsers:DEFAULT_MAX;
-    const people=[],bids=[],bnames={};
+    const people=[];
     ms.forEach(d=>people.push({id:d.id,role:d.data().role||"member",status:d.data().status||"active"}));
-    bs.forEach(d=>{bids.push(d.id);bnames[d.id]=d.data().name||""});
     const cnt=people.filter(p=>p.role==="member"&&p.status!=="blocked").length;
     if(!c.exists()||c.data().count!==cnt)await setDoc(statsRef(),{count:cnt});
-    const names=await namesFor([...new Set([...people.map(p=>p.id),...bids])],force,true);
-    adm={uid:user.uid,at:Date.now(),max,people,bids,names,bnames};
+    const names=await namesFor(people.map(p=>p.id),force,false);
+    adm={uid:user.uid,at:Date.now(),max,people,names,brecs:{},bloaded:false};
     renderAdmin();
+    if($("adet").open)loadBlocked();
   }catch(e){$("astat").textContent="불러오기 실패: "+(e.code||"오류")}
 }
+$("adet").addEventListener("toggle",()=>{if($("adet").open&&adm&&!adm.bloaded)loadBlocked()});
 $("aadd").onclick=async()=>{
   const id=$("auid").value.trim();
   if(!adm){return}
