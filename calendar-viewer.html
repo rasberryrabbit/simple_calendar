@@ -30,6 +30,10 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
 #bwrap{cursor:pointer;margin-left:12px}
 .legend{display:flex;flex-wrap:wrap;gap:14px;margin:0 2px 8px;font-size:13px}
 .legend label{cursor:pointer}
+.owner{flex-wrap:wrap;row-gap:6px}
+.owner>*{white-space:nowrap;flex:0 0 auto}
+.owner #oname{flex:0 1 auto;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.owner #info{white-space:normal;flex:1 1 auto}
 .wide-toggle{cursor:pointer;margin-left:12px;font-size:13px;color:var(--mute)}
 :root[data-wide="1"] .wrap{max-width:none}
 :root[data-wide="1"] .cell{min-height:max(104px,calc((100vh - 280px) / var(--rows,6)))}

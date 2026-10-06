@@ -28,6 +28,10 @@ header h1{flex:1;min-width:120px;margin:0;font-size:20px;color:var(--accent);tex
 button{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer}
 button:hover{border-color:var(--accent)}
 button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--accent)}
+.owner{flex-wrap:wrap;row-gap:6px}
+.owner>*{white-space:nowrap;flex:0 0 auto}
+.owner #oname{flex:0 1 auto;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.owner #info{white-space:normal;flex:1 1 auto}
 .wide-toggle{cursor:pointer;margin-left:12px;font-size:13px;color:var(--mute)}
 :root[data-wide="1"] .wrap{max-width:none}
 :root[data-wide="1"] .cell{min-height:max(104px,calc((100vh - 280px) / var(--rows,6)))}
@@ -53,6 +57,7 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
 .menuwrap{position:relative;display:inline-block}
 .menu{position:absolute;top:calc(100% + 6px);left:0;z-index:5;min-width:240px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px;box-shadow:0 8px 24px #0003}
 .menu[hidden]{display:none}
+.menu{white-space:normal}
 .menu button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:8px 10px;border-radius:8px}
 .menu button:hover{background:var(--dim)}
 .menu .danger{color:var(--sun)}
@@ -98,7 +103,7 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
     <label id="bwrap" style="margin-left:12px"><input type="checkbox" id="sbase"> 출시일 표시</label></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v31)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v32)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
