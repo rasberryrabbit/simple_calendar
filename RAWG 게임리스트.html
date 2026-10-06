@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>이번 달 게임 출시 일정</title>
+    <title>게임 출시 일정 검색기 & 내보내기</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -31,48 +31,73 @@
             display: flex;
             gap: 10px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
+            align-items: center;
         }
-        input[type="text"] {
-            flex: 1;
+        input[type="text"], input[type="month"] {
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 5px;
             font-size: 16px;
+            box-sizing: border-box;
+        }
+        input[type="text"] {
+            flex: 2;
+            min-width: 200px;
+        }
+        input[type="month"] {
+            flex: 1;
+            min-width: 120px;
         }
         button {
             padding: 10px 20px;
-            background-color: #007bff;
             color: white;
             border: none;
             border-radius: 5px;
             font-size: 16px;
             cursor: pointer;
             transition: background-color 0.3s;
+            white-space: nowrap;
         }
-        button:hover {
-            background-color: #0056b3;
-        }
+        .btn-primary { background-color: #007bff; }
+        .btn-primary:hover { background-color: #0056b3; }
+        .btn-success { background-color: #28a745; }
+        .btn-success:hover { background-color: #218838; }
+        .btn-danger { background-color: #6c757d; }
+        .btn-danger:hover { background-color: #5a6268; }
+
         #status {
             text-align: center;
             margin: 20px 0;
             font-weight: bold;
             color: #555;
         }
-        .error {
-            color: #d9534f;
-        }
-        ul {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
+        .error { color: #d9534f; }
+        ul { list-style: none; padding: 0; margin: 0; }
         li {
             background-color: #f9f9f9;
             border-left: 4px solid #007bff;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
             padding: 15px;
             border-radius: 4px;
+            display: flex;
+            gap: 15px;
+            align-items: flex-start;
         }
+        .game-image {
+            flex-shrink: 0;
+            width: 150px;
+            height: 90px;
+            border-radius: 5px;
+            overflow: hidden;
+            background-color: #eaeaea;
+        }
+        .game-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .game-details { flex-grow: 1; }
         .game-date {
             color: #d9534f;
             font-weight: bold;
@@ -82,32 +107,89 @@
             font-size: 1.2em;
             font-weight: bold;
             color: #2c3e50;
+            display: block;
+            margin-bottom: 5px;
         }
         .game-info {
             margin-top: 5px;
             color: #666;
             font-size: 0.95em;
+            line-height: 1.4;
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>🎮 이번 달 게임 출시 일정</h1>
+    <h1>🎮 게임 출시 일정 검색기</h1>
     
     <div class="input-section">
-        <input type="text" id="apiKeyInput" placeholder="RAWG API 키를 입력하세요. (rawg.io/apidocs에서 발급)">
-        <button onclick="fetchGames()">불러오기</button>
+        <input type="text" id="apiKeyInput" placeholder="RAWG API 키 입력" onkeypress="handleKeyPress(event)">
+        <input type="month" id="monthInput">
+        <button onclick="fetchGames()" class="btn-primary">검색</button>
+        <button onclick="exportJSON()" class="btn-success">JSON 내보내기</button>
+        <button onclick="clearApiKey()" class="btn-danger">키 삭제</button>
     </div>
 
-    <div id="status">데이터를 불러오려면 API 키를 입력하고 버튼을 눌러주세요.</div>
+    <div id="status">데이터를 불러오려면 API 키를 입력하고 검색할 달을 선택하세요.</div>
     
     <ul id="gameList"></ul>
 </div>
 
 <script>
+    // 내보내기 할 데이터를 임시로 저장할 객체
+    let exportBaseData = {};
+
+    // 페이지가 로드될 때 실행
+    window.onload = function() {
+        const today = new Date();
+        const currentYear = today.getFullYear();
+        const currentMonth = String(today.getMonth() + 1).padStart(2, '0');
+        document.getElementById('monthInput').value = `${currentYear}-${currentMonth}`;
+
+        const savedApiKey = localStorage.getItem('rawg_api_key');
+        if (savedApiKey) {
+            document.getElementById('apiKeyInput').value = savedApiKey;
+            fetchGames();
+        }
+    };
+
+    function handleKeyPress(event) {
+        if (event.key === 'Enter') {
+            fetchGames();
+        }
+    }
+
+    function clearApiKey() {
+        localStorage.removeItem('rawg_api_key');
+        document.getElementById('apiKeyInput').value = '';
+        document.getElementById('gameList').innerHTML = '';
+        document.getElementById('status').innerHTML = '🔑 API 키가 삭제되었습니다.';
+    }
+
+    // 랜덤 ID 생성 함수 (예: "gmuq3wp")
+    function generateId(length = 7) {
+        const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+        let result = '';
+        for (let i = 0; i < length; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+    }
+
+    // 긴 UID 생성 함수 (예: "HidZYZcXBtfgR31GQijZJ6eJvF62")
+    function generateUid(length = 28) {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        let result = '';
+        for (let i = 0; i < length; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+    }
+
     async function fetchGames() {
         const apiKey = document.getElementById('apiKeyInput').value.trim();
+        const monthValue = document.getElementById('monthInput').value;
         const statusDiv = document.getElementById('status');
         const gameList = document.getElementById('gameList');
         
@@ -115,66 +197,136 @@
             statusDiv.innerHTML = '<p class="error">⚠️ API 키를 먼저 입력해주세요!</p>';
             return;
         }
+        if (!monthValue) {
+            statusDiv.innerHTML = '<p class="error">⚠️ 검색할 년도와 월을 선택해주세요!</p>';
+            return;
+        }
 
-        // 오늘 날짜 기준으로 이번 달 계산 (브라우저의 시간을 따름)
-        const today = new Date(); 
-        const year = today.getFullYear();
-        const month = today.getMonth() + 1; // 0~11이므로 +1
-        
-        // 이번 달의 마지막 날 계산
+        localStorage.setItem('rawg_api_key', apiKey);
+
+        const [year, month] = monthValue.split('-');
         const lastDay = new Date(year, month, 0).getDate();
-        
-        // YYYY-MM-DD 포맷팅
         const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
         const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
         statusDiv.innerHTML = `⏳ ${year}년 ${month}월 출시 일정을 불러오는 중...`;
-        gameList.innerHTML = ''; // 기존 목록 초기화
+        gameList.innerHTML = ''; 
 
         const url = `https://api.rawg.io/api/games?key=${apiKey}&dates=${startDate},${endDate}&ordering=released&page_size=100`;
 
         try {
             const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error('API 요청 실패. API 키를 확인하세요.');
-            }
+            if (!response.ok) throw new Error('API 요청 실패. API 키를 확인하세요.');
+            
             const data = await response.json();
             const games = data.results;
 
             if (games.length === 0) {
-                statusDiv.innerHTML = `🔍 ${year}년 ${month}월에 출시 예정인 게임 데이터를 찾을 수 없습니다.`;
+                statusDiv.innerHTML = `🔍 ${year}년 ${month}월에 출시된 게임 데이터를 찾을 수 없습니다.`;
                 return;
             }
 
             statusDiv.innerHTML = `✅ 총 ${games.length}개의 게임이 검색되었습니다. (${year}년 ${month}월 기준)`;
 
+            // JSON 내보내기를 위한 데이터 구조화
+            const ym = `${year}-${String(month).padStart(2, '0')}`;
+            const events = {};
+            
+            // expireAt 생성 (YYYY년 + 6년의 해당 월 마지막 날 15:00:00.000Z)
+            const expireYear = parseInt(year) + 6;
+            const expireDate = new Date(Date.UTC(expireYear, parseInt(month), 0, 15, 0, 0));
+            const expireAt = expireDate.toISOString();
+
             games.forEach(game => {
                 const releaseDate = game.released || '미정';
                 const name = game.name || '알 수 없음';
-                
-                // 장르 처리
+                const imageUrl = game.background_image || 'https://via.placeholder.com/150x90?text=No+Image';
                 const genres = game.genres.map(g => g.name).join(', ') || '미분류';
-                // 플랫폼 처리
                 const platforms = game.platforms ? game.platforms.map(p => p.platform.name).join(', ') : '미정';
 
-                // HTML 요소 생성
+                // 화면에 표시
                 const li = document.createElement('li');
                 li.innerHTML = `
-                    <div>
-                        <span class="game-date">[${releaseDate}]</span>
-                        <span class="game-name">${name}</span>
+                    <div class="game-image">
+                        <img src="${imageUrl}" alt="${name} 이미지">
                     </div>
-                    <div class="game-info">
-                        장르: ${genres} <br>
-                        플랫폼: ${platforms}
+                    <div class="game-details">
+                        <div>
+                            <span class="game-date">[${releaseDate}]</span>
+                            <span class="game-name">${name}</span>
+                        </div>
+                        <div class="game-info">
+                            장르: ${genres} <br>
+                            플랫폼: ${platforms}
+                        </div>
                     </div>
                 `;
                 gameList.appendChild(li);
+
+                // JSON 데이터용 가공
+                if (game.released) {
+                    if (!events[game.released]) events[game.released] = [];
+                    events[game.released].push({
+                        c: "game",
+                        t: name,
+                        id: generateId()
+                    });
+                }
             });
+
+            // 메모리에 데이터 저장 (여러 달 검색 시 누적됨)
+            exportBaseData[ym] = {
+                events: events,
+                expireAt: expireAt
+            };
 
         } catch (error) {
             statusDiv.innerHTML = `<p class="error">❌ 오류 발생: ${error.message}</p>`;
         }
+    }
+
+    // JSON 파일로 내보내기 기능
+    function exportJSON() {
+        if (Object.keys(exportBaseData).length === 0) {
+            alert("내보낼 데이터가 없습니다. 먼저 게임을 검색해주세요.");
+            return;
+        }
+
+        // 최종 JSON 구조 생성
+        const finalData = {
+            exportedAt: new Date().toISOString(),
+            uid: generateUid(),
+            name: "RAWG Generated",
+            months: {},
+            base: exportBaseData
+        };
+
+        // months 채우기 (base에 있는 키와 동일하게 비워서 채움)
+        for (const ym in exportBaseData) {
+            finalData.months[ym] = {
+                events: {},
+                expireAt: exportBaseData[ym].expireAt
+            };
+        }
+
+        // JSON 문자열로 변환 (들여쓰기 2칸)
+        const jsonStr = JSON.stringify(finalData, null, 2);
+        
+        // Blob 생성 후 다운로드 트리거
+        const blob = new Blob([jsonStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        // 파일명 생성: 가져온 날짜(오늘 날짜)와 검색한 달(들)을 조합
+        const todayDate = new Date().toISOString().split('T')[0];
+        const searchedMonths = Object.keys(exportBaseData).join('_');
+        a.download = `game_schedule_${todayDate}_${searchedMonths}.json`;
+        
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 </script>
 
