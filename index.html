@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<script>try{var p=localStorage.getItem("pal");if(p)document.documentElement.dataset.pal=p}catch(e){}</script>
+<script>document.documentElement.dataset.wide="1";try{var p=localStorage.getItem("pal");if(p)document.documentElement.dataset.pal=p;if(localStorage.getItem("wide")==="0")delete document.documentElement.dataset.wide}catch(e){}</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>공유 캘린더</title>
 <style>
@@ -28,6 +28,9 @@ header h1{flex:1;min-width:120px;margin:0;font-size:20px;color:var(--accent);tex
 button{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer}
 button:hover{border-color:var(--accent)}
 button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--accent)}
+.wide-toggle{cursor:pointer;margin-left:12px;font-size:13px;color:var(--mute)}
+:root[data-wide="1"] .wrap{max-width:none}
+:root[data-wide="1"] .cell{min-height:max(104px,calc((100vh - 280px) / var(--rows,6)))}
 .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--card)}
 .grid{display:grid;grid-template-columns:repeat(7,minmax(92px,1fr));min-width:644px}
 .dow{padding:7px 0;text-align:center;font-weight:600;background:var(--dim);border-bottom:1px solid var(--line)}
@@ -91,11 +94,11 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
     <button id="adm" style="display:none">사용자 관리</button>
     <label id="pwrap" style="display:none"><input type="checkbox" id="priv"> 나만 보기(비공개)</label>
     <label id="lwrap" style="display:none"><input type="checkbox" id="listed"> 다른 사람이 찾을 수 있게 노출</label>
-    <select class="pal" id="pal" title="색상 테마" aria-label="색상 테마"><option value="">기본(자동)</option><option value="pink">핑크</option><option value="pastel">파스텔</option><option value="ocean">바다</option><option value="forest">숲</option><option value="sunset">석양</option><option value="contrast">고대비</option><option value="night">야간</option></select>
+    <select class="pal" id="pal" title="색상 테마" aria-label="색상 테마"><option value="">기본(자동)</option><option value="pink">핑크</option><option value="pastel">파스텔</option><option value="ocean">바다</option><option value="forest">숲</option><option value="sunset">석양</option><option value="contrast">고대비</option><option value="night">야간</option></select><label class="wide-toggle" title="화면 너비에 맞춰 넓게 보기"><input type="checkbox" id="wide"> 전체 너비</label>
     <label id="bwrap" style="margin-left:12px"><input type="checkbox" id="sbase"> 출시일 표시</label></div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v30)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v31)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -232,6 +235,7 @@ function render(){
   DOW.forEach((d,i)=>{const e=document.createElement("div");e.className="dow"+(i==5?" sat":i==6?" sun":"");e.textContent=d;g.appendChild(e)});
   const off=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate(),prevDays=new Date(y,m,0).getDate();
   const rows=Math.ceil((off+days)/7),t=new Date();
+  g.style.setProperty("--rows",rows);
   for(let i=0;i<rows*7;i++){
     const c=document.createElement("div"),col=i%7,d=i-off+1;
     const n=document.createElement("div");n.className="n"+(col==5?" sat":col==6?" sun":"");
@@ -853,6 +857,14 @@ $("today").onclick=()=>{y=now.getFullYear();m=now.getMonth();subscribe()};
 try{showBase=localStorage.getItem("showBase")!=="0"}catch(e){}
 $("sbase").checked=showBase;
 $("sbase").onchange=()=>{showBase=$("sbase").checked;try{localStorage.setItem("showBase",showBase?"1":"0")}catch(e){}render()};
+(function(){
+  const cb=document.getElementById("wide");
+  cb.checked=document.documentElement.dataset.wide==="1";
+  cb.onchange=()=>{
+    if(cb.checked)document.documentElement.dataset.wide="1";else delete document.documentElement.dataset.wide;
+    try{localStorage.setItem("wide",cb.checked?"1":"0")}catch(e){}
+  };
+})();
 (function(){
   const sel=document.getElementById("pal");
   sel.value=document.documentElement.dataset.pal||"";
