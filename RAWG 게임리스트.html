@@ -116,16 +116,36 @@
             font-size: 0.95em;
             line-height: 1.4;
         }
-        .game-desc {
+        .game-desc-wrapper {
             margin-top: 8px;
-            font-size: 0.9em;
-            color: #555;
-            line-height: 1.5;
             background-color: #eef2f7;
             padding: 8px;
             border-radius: 4px;
-            white-space: pre-wrap; /* 줄바꿈 및 공백 유지 */
-            word-break: break-word; /* 긴 단어 줄바꿈 처리 */
+        }
+        .game-desc {
+            font-size: 0.9em;
+            color: #555;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .btn-translate {
+            margin-top: 8px;
+            padding: 4px 10px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .btn-translate:hover:not(:disabled) {
+            background-color: #5a6268;
+        }
+        .btn-translate:disabled {
+            cursor: not-allowed;
+            opacity: 0.7;
         }
     </style>
 </head>
@@ -149,6 +169,7 @@
 
 <script>
     let exportBaseData = {};
+    let descStore = {}; // 원문 설명을 임시 저장할 객체 (번역 시 사용)
 
     window.onload = function() {
         const today = new Date();
@@ -194,6 +215,77 @@
         return result;
     }
 
+    // 다중 프록시 및 대체 API를 활용한 안정적인 번역 함수
+    async function translateText(text) {
+        if (!text || text === "상세 설명이 없습니다.") return text;
+        
+        // 1. Lingva Translate API 시도
+        try {
+            const lingvaUrl = `https://lingva.ml/api/v1/auto/ko/${encodeURIComponent(text)}`;
+            const res = await fetch(lingvaUrl);
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.translation) return data.translation;
+            }
+        } catch (e) {
+            console.error("Lingva Translation failed, trying proxies...", e);
+        }
+
+        // 2. 구글 번역 비공식 API + 다중 프록시 시도
+        const targetUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl=auto&tl=ko&q=${encodeURIComponent(text)}`;
+        const proxies = [
+            (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+            (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+            (url) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`
+        ];
+
+        for (let i = 0; i < proxies.length; i++) {
+            try {
+                const proxyUrl = proxies[i](targetUrl);
+                const res = await fetch(proxyUrl);
+                if (!res.ok) continue;
+                const data = await res.json();
+                
+                let translated = "";
+                if (data && Array.isArray(data[0])) {
+                    data[0].forEach(chunk => {
+                        if (chunk[0]) translated += chunk[0];
+                    });
+                }
+                if (translated) return translated;
+            } catch (e) {
+                console.error(`Proxy ${i} failed:`, e);
+            }
+        }
+        
+        return null; // 모든 번역 시도 실패
+    }
+
+    // 개별 번역 버튼 클릭 시 실행되는 함수
+    async function translateDesc(rawgId, btn) {
+        const originalText = descStore[rawgId];
+        if (!originalText || originalText === "상세 설명이 없습니다.") return;
+
+        const el = document.getElementById(`desc-${rawgId}`);
+        
+        // 버튼 상태 변경
+        btn.disabled = true;
+        btn.innerText = "번역 중...";
+        if (el) el.innerText = "번역 중... (네트워크 상황에 따라 시간이 걸릴 수 있습니다)";
+
+        const translatedText = await translateText(originalText);
+
+        if (translatedText) {
+            if (el) el.innerText = translatedText;
+            btn.innerText = "번역 완료";
+        } else {
+            // 번역 실패 시 원문으로 복구
+            if (el) el.innerText = originalText + "\n\n[번역 실패: 원문 표시됨]";
+            btn.innerText = "번역 실패 (재시도)";
+            btn.disabled = false; // 다시 시도할 수 있도록 활성화
+        }
+    }
+
     async function fetchGames() {
         const apiKey = document.getElementById('apiKeyInput').value.trim();
         const monthValue = document.getElementById('monthInput').value;
@@ -218,6 +310,7 @@
 
         statusDiv.innerHTML = `⏳ ${year}년 ${month}월 출시 일정을 불러오는 중...`;
         gameList.innerHTML = ''; 
+        descStore = {}; // 새로 검색 시 저장소 초기화
 
         const url = `https://api.rawg.io/api/games?key=${apiKey}&dates=${startDate},${endDate}&ordering=released&page_size=100`;
 
@@ -262,7 +355,10 @@
                             장르: ${genres} <br>
                             플랫폼: ${platforms}
                         </div>
-                        <div class="game-desc" id="desc-${game.id}">설명을 불러오는 중...</div>
+                        <div class="game-desc-wrapper">
+                            <div class="game-desc" id="desc-${game.id}">설명을 불러오는 중...</div>
+                            <button onclick="translateDesc('${game.id}', this)" class="btn-translate">번역</button>
+                        </div>
                     </div>
                 `;
                 gameList.appendChild(li);
@@ -286,7 +382,7 @@
                 expireAt: expireAt
             };
 
-            statusDiv.innerHTML = `✅ 총 ${games.length}개의 게임이 검색되었습니다. (설명 불러오는 중...)`;
+            statusDiv.innerHTML = `✅ 총 ${games.length}개의 게임이 검색되었습니다. (설명 로드 중...)`;
             
             await loadDescriptions(descQueue, apiKey);
             
@@ -297,7 +393,7 @@
         }
     }
 
-    // 상세 설명을 비동기로 가져오는 함수 (화면 표시 전용)
+    // 상세 설명을 비동기로 가져오는 함수 (원문만 로드)
     async function loadDescriptions(queue, apiKey) {
         const chunkSize = 5;
         for (let i = 0; i < queue.length; i += chunkSize) {
@@ -309,8 +405,8 @@
                     if (!res.ok) return;
                     const data = await res.json();
                     
-                    // 100자 자르기 없이 전체 설명 그대로 사용
                     let desc = data.description_raw || "상세 설명이 없습니다.";
+                    descStore[item.rawgId] = desc; // 메모리에 원문 저장
                     
                     const el = document.getElementById(item.domId);
                     if (el) el.innerText = desc;
