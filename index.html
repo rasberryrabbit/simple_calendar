@@ -141,7 +141,7 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
   </div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v36)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v37)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -525,6 +525,7 @@ function planFromBackup(obj){
 }
 const cnt=p=>Object.values(p).reduce((a,mo)=>a+Object.values(mo).reduce((b,l)=>b+l.length,0),0);
 async function restoreInto(colPath,plan,docPath){
+  if(!Object.keys(plan).length)return 0;   /* 복구할 달이 없으면 읽지도 않아요 */
   const cur={};
   const snap=await getDocs(collection(db,...colPath));
   snap.forEach(d=>{cur[d.id]=d.data().events||{}});
@@ -548,11 +549,12 @@ $("rfile").onchange=async e=>{
     const pm=Object.keys(personal).length,bm=Object.keys(baseP).length,doBase=isAdmin()&&bm>0;
     if(!pm&&!doBase){setStatus(bm?"이 파일에는 출시 일정만 있어서 관리자 계정에서만 복구할 수 있어요.":"복구할 일정이 없는 파일이에요.");return}
     const old=Object.keys(personal).concat(doBase?Object.keys(baseP):[]).filter(isExpired).length;
-    let msg="'"+file.name+"'에서 복구해요.\n- 내 일정: "+pm+"개월분, "+cnt(personal)+"건";
+    let msg="'"+file.name+"'에서 복구해요.";
+    if(pm)msg+="\n- 내 일정: "+pm+"개월분, "+cnt(personal)+"건";
     if(doBase)msg+="\n- 출시 일정: "+bm+"개월분, "+cnt(baseP)+"건";
     else if(bm)msg+="\n- 출시 일정은 관리자만 복구할 수 있어 건너뛰어요.";
     msg+="\n\n지금 있는 일정은 지우지 않고, 같은 일정은 중복 없이 합쳐요.";
-    if(obj.uid&&obj.uid!==user.uid)msg+="\n※ 다른 계정("+(obj.name||"이름 없음")+")에서 받은 백업이에요. 내 캘린더에 합쳐져요.";
+    if(pm&&obj.uid&&obj.uid!==user.uid)msg+="\n※ 다른 계정("+(obj.name||"이름 없음")+")에서 받은 백업이에요. 내 캘린더에 합쳐져요.";
     if(old)msg+="\n※ "+EXP_YEARS+"년이 지난 "+old+"개월분은 다음 로그인 때 다시 정리 대상이 돼요.";
     if(!confirm(msg+"\n\n계속할까요?"))return;
     setStatus("복구 중...");
