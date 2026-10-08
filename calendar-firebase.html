@@ -141,7 +141,7 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
   </div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v37)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v38)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -175,7 +175,7 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
 </div></div>
 <div class="modal" id="tmodal"><div class="box">
   <h2>내 테마 만들기</h2>
-  <div class="sub">색을 고르면 바로 적용되고, 이 브라우저에 저장돼요.</div>
+  <div class="sub" id="tinfo">색을 고르면 바로 적용되고, 이 브라우저에 저장돼요.</div>
   <div class="tgrid" id="tgrid"></div>
   <div id="tnote"></div>
   <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"><button id="texport" type="button">⬇ 테마 내려받기</button><button id="timport" type="button">⬆ 테마 불러오기</button><input type="file" id="tfile" accept=".json,application/json" hidden></div>
@@ -929,6 +929,17 @@ $("sbase").onchange=()=>{showBase=$("sbase").checked;try{localStorage.setItem("s
   sel.value=root.dataset.pal||"";
   sel.onchange=()=>{const v=sel.value;if(v==="custom")CT.apply(CT.load());setPal(v)};
   /* ---- 내 테마 편집기 ---- */
+  /* '#fff', 'rgb(…)' 같은 표기도 '#rrggbb'로 바꿔요 */
+  const toHex6=v=>{
+    v=(v||"").trim().toLowerCase();
+    if(/^#[0-9a-f]{6}$/.test(v))return v;
+    if(/^#[0-9a-f]{3}$/.test(v))return "#"+v[1]+v[1]+v[2]+v[2]+v[3]+v[3];
+    if(!v)return null;
+    const t=document.createElement("span");t.style.color=v;document.body.appendChild(t);
+    const c=getComputedStyle(t).color;t.remove();
+    const m=c.match(/\d+/g);
+    return m&&m.length>=3?"#"+m.slice(0,3).map(x=>(+x).toString(16).padStart(2,"0")).join(""):null;
+  };
   const grid=document.getElementById("tgrid"),note=document.getElementById("tnote"),modal=document.getElementById("tmodal");
   let cur=CT.load();
   const noteUpdate=()=>{
@@ -944,13 +955,15 @@ $("sbase").onchange=()=>{showBase=$("sbase").checked;try{localStorage.setItem("s
     grid.append(l,i);
   });
   document.getElementById("themeEdit").onclick=()=>{
+    /* 저장해 둔 내 테마가 아니라, 지금 화면에 쓰이고 있는 테마의 색으로 편집 창을 열어요 */
+    const cs=getComputedStyle(root);
+    cur=CT.load();
+    CT.FIELDS.forEach(([k])=>{const v=toHex6(cs.getPropertyValue("--"+k));if(v)cur[k]=v});
     let saved=false;try{saved=!!localStorage.getItem("customTheme")}catch(e){}
-    if(!saved&&root.dataset.pal!=="custom"){
-      /* 처음 만들 때는 지금 보이는 테마의 색에서 시작해요 */
-      const cs=getComputedStyle(root);cur=CT.load();
-      CT.FIELDS.forEach(([k])=>{const v=cs.getPropertyValue("--"+k).trim().toLowerCase();if(CT.isHex(v))cur[k]=v});
-    }else cur=CT.load();
-    fill();CT.save(cur);CT.apply(cur);setPal("custom");noteUpdate();
+    document.getElementById("tinfo").textContent=(saved&&root.dataset.pal!=="custom")
+      ?"지금 사용 중인 테마의 색에서 시작해요. 색을 바꾸면 저장해 둔 내 테마가 이 색으로 바뀌어요."
+      :"지금 사용 중인 테마의 색에서 시작해요. 색을 고르면 바로 적용되고, 이 브라우저에 저장돼요.";
+    fill();noteUpdate();   /* 열기만 해서는 테마를 바꾸거나 저장하지 않아요 */
     modal.classList.add("on");
   };
   /* ---- 테마 JSON 내려받기 / 불러오기 ---- */
