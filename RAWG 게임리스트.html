@@ -176,6 +176,10 @@
             <input type="checkbox" id="indieChk">
             <label for="indieChk">인디 게임만</label>
         </div>
+        <div class="checkbox-section">
+            <input type="checkbox" id="noDescChk">
+            <label for="noDescChk">설명 숨기기</label>
+        </div>
         <button onclick="fetchGames()" class="btn-primary">검색</button>
         <button onclick="exportJSON()" class="btn-success">JSON 내보내기</button>
         <button onclick="clearApiKey()" class="btn-danger">키 삭제</button>
@@ -309,6 +313,7 @@
         const apiKey = document.getElementById('apiKeyInput').value.trim();
         const monthValue = document.getElementById('monthInput').value;
         const isIndie = document.getElementById('indieChk').checked;
+        const isNoDesc = document.getElementById('noDescChk').checked;
         const statusDiv = document.getElementById('status');
         const gameList = document.getElementById('gameList');
         
@@ -368,6 +373,17 @@
                 // 게임 링크 생성 (RAWG 사이트 내의 게임 슬러그 이용)
                 const gameLink = `https://rawg.io/games/${game.slug}`;
 
+                // 설명 숨기기 여부에 따라 HTML 구조 변경
+                let descHtml = '';
+                if (!isNoDesc) {
+                    descHtml = `
+                        <div class="game-desc-wrapper">
+                            <div class="game-desc" id="desc-${game.id}">설명을 불러오는 중...</div>
+                            <button onclick="translateDesc('${game.id}', this)" class="btn-translate">번역</button>
+                        </div>
+                    `;
+                }
+
                 const li = document.createElement('li');
                 li.innerHTML = `
                     <div class="game-image">
@@ -382,10 +398,7 @@
                             장르: ${genres} <br>
                             플랫폼: ${platforms}
                         </div>
-                        <div class="game-desc-wrapper">
-                            <div class="game-desc" id="desc-${game.id}">설명을 불러오는 중...</div>
-                            <button onclick="translateDesc('${game.id}', this)" class="btn-translate">번역</button>
-                        </div>
+                        ${descHtml}
                     </div>
                 `;
                 gameList.appendChild(li);
@@ -400,7 +413,10 @@
                     };
                     events[game.released].push(gameData);
                     
-                    descQueue.push({ rawgId: game.id, domId: `desc-${game.id}` });
+                    // 설명을 숨기지 않을 경우에만 상세 설명 로드 큐에 추가
+                    if (!isNoDesc) {
+                        descQueue.push({ rawgId: game.id, domId: `desc-${game.id}` });
+                    }
                 }
             });
 
@@ -409,11 +425,14 @@
                 expireAt: expireAt
             };
 
-            statusDiv.innerHTML = `✅ 총 ${games.length}개의 ${isIndie ? '인디 ' : ''}게임이 검색되었습니다. (설명 로드 중...)`;
-            
-            await loadDescriptions(descQueue, apiKey);
-            
-            statusDiv.innerHTML = `✅ 총 ${games.length}개의 ${isIndie ? '인디 ' : ''}게임이 검색되었습니다. (${year}년 ${month}월 기준)`;
+            // 설명 숨기기 여부에 따라 상태 메시지 변경
+            if (isNoDesc) {
+                statusDiv.innerHTML = `✅ 총 ${games.length}개의 ${isIndie ? '인디 ' : ''}게임이 검색되었습니다. (${year}년 ${month}월 기준)`;
+            } else {
+                statusDiv.innerHTML = `✅ 총 ${games.length}개의 ${isIndie ? '인디 ' : ''}게임이 검색되었습니다. (설명 로드 중...)`;
+                await loadDescriptions(descQueue, apiKey);
+                statusDiv.innerHTML = `✅ 총 ${games.length}개의 ${isIndie ? '인디 ' : ''}게임이 검색되었습니다. (${year}년 ${month}월 기준)`;
+            }
 
         } catch (error) {
             statusDiv.innerHTML = `<p class="error">❌ 오류 발생: ${error.message}</p>`;
