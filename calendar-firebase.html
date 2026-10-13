@@ -64,6 +64,9 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
 .chip.dis{opacity:.45;cursor:not-allowed}
 .owner .chip{color:var(--ink);font-size:13px}
 .owner .chip.on{color:var(--onaccent)}
+button.lk{padding:6px 9px;opacity:.55}
+button.lk.has{opacity:1;border-color:var(--accent);color:var(--accent)}
+.lin{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:8px 0 4px}
 .wide-toggle{cursor:pointer;margin-left:12px;font-size:13px;color:var(--mute)}
 :root[data-wide="1"] .wrap{max-width:none}
 :root[data-wide="1"] .cell{min-height:max(104px,calc((100vh - 280px) / var(--rows,6)))}
@@ -141,7 +144,7 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
   </div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v38)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v39)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -181,6 +184,17 @@ button.pri{background:var(--accent);color:var(--onaccent);border-color:var(--acc
   <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"><button id="texport" type="button">⬇ 테마 내려받기</button><button id="timport" type="button">⬆ 테마 불러오기</button><input type="file" id="tfile" accept=".json,application/json" hidden></div>
   <div class="acts"><button id="treset">기본 색으로</button><button id="tclose" class="pri">완료</button></div>
 </div></div>
+<div class="modal" id="lmodal" style="z-index:12"><div class="box">
+  <h2>링크 넣기</h2>
+  <div class="sub" id="ltitle"></div>
+  <input id="lurl" class="lin" type="url" inputmode="url" placeholder="https://..." autocomplete="off">
+  <div class="sub" id="lmsg" style="min-height:1.2em"></div>
+  <div class="acts" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <span style="display:flex;gap:8px"><button id="lopen" type="button">↗ 열어서 확인</button><button id="ldel" type="button">삭제</button></span>
+    <span style="display:flex;gap:8px"><button id="lcancel" type="button">취소</button><button id="lok" class="pri" type="button">적용</button></span>
+  </div>
+  <div class="sub">적용한 뒤 날짜 창 아래의 <b>저장</b>을 눌러야 서버에 반영돼요.</div>
+</div></div>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {getFirestore,doc,onSnapshot,setDoc,collection,query,where,limit,documentId,deleteField,getDocs,getDoc,deleteDoc,runTransaction,serverTimestamp,writeBatch,Timestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -211,6 +225,20 @@ const isOwnerUser=()=>myRole==="owner";
 const BTYPES={game:"게임",event:"이벤트",gear:"장비"};
 const BICON={game:"🎮",event:"🎉",gear:"🖥️"};
 const expTs=()=>Timestamp.fromDate(new Date(y+EXP_YEARS,m+1,1)); // 해당 월이 끝나고 6년 뒤 만료
+/* ---------- 링크 안전 처리: http/https 주소만 허용해요 ---------- */
+function safeUrl(v){
+  if(typeof v!=="string")return "";
+  let x=v.trim();
+  if(!x||x.length>300)return "";
+  if(!/^[a-z][a-z0-9+.-]*:/i.test(x))x="https://"+x;
+  try{
+    const u=new URL(x);
+    if(u.protocol!=="https:"&&u.protocol!=="http:")return "";
+    if(u.username||u.password)return "";
+    return u.href.length>300?"":u.href;
+  }catch(e){return ""}
+}
+const hostOf=u=>{try{return new URL(u).hostname.replace(/^www\./,"")}catch(e){return ""}};
 const rid=()=>Math.random().toString(36).slice(2,9);
 const pad=n=>String(n).padStart(2,"0");
 const mkey=()=>y+"-"+pad(m+1);
@@ -300,7 +328,7 @@ function render(){
         c.classList.add("hasbase");
         bl.forEach(x=>{
           const b=document.createElement("div");b.className="base";
-          b.textContent=(BICON[x.c]||"")+" "+x.t;
+          b.textContent=(BICON[x.c]||"")+" "+x.t+(safeUrl(x.u)?" 🔗":"");
           c.appendChild(b);
         });
       }
@@ -326,6 +354,46 @@ function openDay(d){
   $("save").style.display=(canWrite()||isAdmin())?"":"none";
   $("modal").classList.add("on");
 }
+function updateLinkBtn(btn,ev){
+  const u=safeUrl(ev.u);
+  btn.textContent="🔗";
+  btn.classList.toggle("has",!!u);
+  btn.title=u?"링크: "+hostOf(u):"링크 넣기";
+}
+let linkTarget=null;
+function closeLink(){$("lmodal").classList.remove("on");linkTarget=null}
+function openLink(ev,btn){
+  linkTarget={ev,btn};
+  $("ltitle").textContent=ev.t.trim()||"(제목 없음)";
+  $("lurl").value=ev.u||"";
+  $("lmsg").textContent="";
+  $("lmodal").classList.add("on");
+  setTimeout(()=>$("lurl").focus(),0);
+}
+function applyLink(){
+  if(!linkTarget)return;
+  const raw=$("lurl").value.trim();
+  if(!raw){linkTarget.ev.u=""}
+  else{
+    const u=safeUrl(raw);
+    if(!u){$("lmsg").textContent="http:// 또는 https:// 주소를 300자 이내로 입력해 주세요.";return}
+    linkTarget.ev.u=u;
+  }
+  updateLinkBtn(linkTarget.btn,linkTarget.ev);
+  closeLink();
+}
+$("lok").onclick=applyLink;
+$("lurl").onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();applyLink()}};
+$("ldel").onclick=()=>{if(linkTarget){linkTarget.ev.u="";updateLinkBtn(linkTarget.btn,linkTarget.ev)}closeLink()};
+$("lcancel").onclick=closeLink;
+$("lmodal").onclick=e=>{if(e.target===$("lmodal"))closeLink()};
+$("lopen").onclick=()=>{
+  const u=safeUrl($("lurl").value.trim());
+  if(!u){$("lmsg").textContent="열 수 있는 주소가 아니에요. http:// 또는 https:// 주소를 입력해 주세요.";return}
+  window.open(u,"_blank","noopener,noreferrer");
+};
+/* Esc: 링크 팝업이 열려 있으면 그것만 닫아요 */
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("lmodal").classList.contains("on")){e.stopPropagation();closeLink()}},true);
 function drawBase(){
   const box=$("bsec");box.innerHTML="";
   const adm=isAdmin();
@@ -336,13 +404,23 @@ function drawBase(){
     const row=document.createElement("div");row.className="row";
     if(!adm){
       const t=document.createElement("div");t.textContent=(BICON[ev.c]||"")+" "+ev.t;t.style.padding="4px 2px";row.appendChild(t);
+      const su=safeUrl(ev.u);
+      if(su){
+        const a=document.createElement("a");
+        a.href=su;a.target="_blank";a.rel="noopener noreferrer";
+        a.textContent="🔗 "+hostOf(su);
+        a.style.cssText="margin-left:8px;color:var(--accent);text-decoration:none;white-space:nowrap";
+        t.append(a);
+      }
     }else{
       const sel=document.createElement("select");
       Object.entries(BTYPES).forEach(([k,v])=>{const o=document.createElement("option");o.value=k;o.textContent=v;if(k==ev.c)o.selected=true;sel.appendChild(o)});
       sel.onchange=()=>ev.c=sel.value;
       const inp=document.createElement("input");inp.value=ev.t;inp.placeholder="출시 일정 내용";inp.oninput=()=>ev.t=inp.value;
       const x=document.createElement("button");x.textContent="✕";x.setAttribute("aria-label","삭제");x.onclick=()=>{baseWork.splice(i,1);drawBase()};
-      row.append(sel,inp,x);
+      const lb=document.createElement("button");lb.type="button";lb.className="lk";lb.setAttribute("aria-label","링크");
+      updateLinkBtn(lb,ev);lb.onclick=()=>openLink(ev,lb);
+      row.append(sel,inp,lb,x);
     }
     box.appendChild(row);
   });
@@ -363,7 +441,7 @@ function drawRows(){
 $("add").onclick=()=>{work.push({id:Math.random().toString(36).slice(2,9),t:"",c:"plan"});drawRows();const i=$("rows").querySelectorAll("input");i[i.length-1].focus()};
 $("cancel").onclick=()=>$("modal").classList.remove("on");
 $("modal").onclick=e=>{if(e.target===$("modal"))$("modal").classList.remove("on")};
-const sameList=(a,b)=>JSON.stringify((a||[]).map(x=>[x.id,x.t,x.c]))===JSON.stringify((b||[]).map(x=>[x.id,x.t,x.c]));
+const sameList=(a,b)=>JSON.stringify((a||[]).map(x=>[x.id,x.t,x.c,x.u||""]))===JSON.stringify((b||[]).map(x=>[x.id,x.t,x.c,x.u||""]));
 $("save").onclick=async()=>{
   const d=editing,mk=mkey(),key=dkey(d);
   $("modal").classList.remove("on");
@@ -377,7 +455,7 @@ $("save").onclick=async()=>{
       }
     }
     if(db&&isAdmin()){
-      const bl=baseWork.filter(x=>x.t.trim()).map(x=>({id:x.id,t:x.t.trim(),c:x.c}));
+      const bl=baseWork.filter(x=>x.t.trim()).map(x=>({id:x.id,t:x.t.trim(),c:x.c,...(safeUrl(x.u)?{u:safeUrl(x.u)}:{})}));
       if(!sameList(bl,baseData[key]))
         await setDoc(doc(db,"base",mk),{events:{[key]:bl.length?bl:deleteField()},expireAt:expTs()},{merge:true});
     }
@@ -499,7 +577,8 @@ function cleanEvents(mk,ev,isBase){
     list.forEach(x=>{
       if(!x||typeof x.t!=="string"||!x.t.trim())return;
       const t=x.t.trim().slice(0,200);
-      a.push({id:(typeof x.id==="string"&&x.id)?x.id.slice(0,20):rid(),t,c:isBase?(BTYPES[x.c]?x.c:"event"):kind(t,x.c)});
+      const su=isBase?safeUrl(x.u):"";
+      a.push({id:(typeof x.id==="string"&&x.id)?x.id.slice(0,20):rid(),t,c:isBase?(BTYPES[x.c]?x.c:"event"):kind(t,x.c),...(su?{u:su}:{})});
     });
     if(a.length){out[d]=a;n+=a.length}
   }
@@ -508,7 +587,7 @@ function cleanEvents(mk,ev,isBase){
 function mergeInto(dst,src){
   for(const [d,list] of Object.entries(src)){
     const a=dst[d]||(dst[d]=[]);
-    list.forEach(x=>{if(!a.some(z=>(z.id&&z.id===x.id)||(z.t===x.t&&z.c===x.c)))a.push(x)});
+    list.forEach(x=>{const e=a.find(z=>(z.id&&z.id===x.id)||(z.t===x.t&&z.c===x.c));if(!e)a.push(x);else if(x.u&&!e.u)e.u=x.u});
   }
 }
 function planFromBackup(obj){

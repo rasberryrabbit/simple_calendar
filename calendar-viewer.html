@@ -142,6 +142,20 @@ const DOW=["월","화","수","목","금","토","일"];
 const BICON={game:"🎮",event:"🎉",gear:"🖥️"};
 const PALETTE=["#5b3fa0","#d9484f","#2f9e6e","#e08a1e","#2f6fd0","#c2449b","#6b7a8c","#0e9aa7"];
 const kind=(t,c)=>/휴식|휴방/.test(t)?"off":(c==="off"||c==="show"?"plan":(c||"plan"));
+/* ---------- 링크 안전 처리: http/https 주소만 허용해요 ---------- */
+function safeUrl(v){
+  if(typeof v!=="string")return "";
+  let x=v.trim();
+  if(!x||x.length>300)return "";
+  if(!/^[a-z][a-z0-9+.-]*:/i.test(x))x="https://"+x;
+  try{
+    const u=new URL(x);
+    if(u.protocol!=="https:"&&u.protocol!=="http:")return "";
+    if(u.username||u.password)return "";
+    return u.href.length>300?"":u.href;
+  }catch(e){return ""}
+}
+const hostOf=u=>{try{return new URL(u).hostname.replace(/^www\./,"")}catch(e){return ""}};
 const now=new Date();
 let y=now.getFullYear(),m=now.getMonth(),base={},sources=[],files=[],showBase=true;
 const mkey=()=>y+"-"+pad(m+1);
@@ -153,7 +167,8 @@ function merge(t,ev){
     const a=t[d]||(t[d]=[]);
     list.forEach(x=>{
       if(!x||typeof x.t!=="string")return;
-      if(!a.some(z=>(z.id&&z.id===x.id)||(!x.id&&z.t===x.t&&z.c===x.c)))a.push(x);
+      const e=a.find(z=>(z.id&&z.id===x.id)||(!x.id&&z.t===x.t&&z.c===x.c));
+      if(!e)a.push(x);else if(x.u&&!e.u)e.u=x.u;
     });
   }
 }
@@ -233,7 +248,7 @@ function render(){
       const bl=showBase?(base[dkey(d)]||[]):[];
       if(bl.length){
         c.classList.add("hasbase");
-        bl.forEach(x=>{const b=document.createElement("div");b.className="base";b.textContent=(BICON[x.c]||"")+" "+x.t;c.appendChild(b)});
+        bl.forEach(x=>{const b=document.createElement("div");b.className="base";b.textContent=(BICON[x.c]||"")+" "+x.t+(safeUrl(x.u)?" 🔗":"");c.appendChild(b)});
       }
       vis.forEach(s=>(s.mine[dkey(d)]||[]).forEach(x=>{
         const e=document.createElement("div"),kd=kind(x.t,x.c);
@@ -253,7 +268,19 @@ function openDay(d){
   const bs=$("bsec");bs.innerHTML="";
   if(b.length){
     const h=document.createElement("div");h.className="sub";h.textContent="출시 일정";bs.appendChild(h);
-    b.forEach(x=>{const r=document.createElement("div");r.className="item";r.textContent=(BICON[x.c]||"")+" "+x.t;bs.appendChild(r)});
+    b.forEach(x=>{
+      const r=document.createElement("div");r.className="item";
+      r.textContent=(BICON[x.c]||"")+" "+x.t;
+      const su=safeUrl(x.u);
+      if(su){
+        const a=document.createElement("a");
+        a.href=su;a.target="_blank";a.rel="noopener noreferrer";
+        a.textContent="🔗 "+hostOf(su);
+        a.style.cssText="margin-left:8px;color:var(--accent);text-decoration:none;white-space:nowrap";
+        r.append(a);
+      }
+      bs.appendChild(r);
+    });
   }
   const ps=$("psec");ps.innerHTML="";
   let any=b.length>0;
