@@ -440,10 +440,12 @@
                 if (game.released) {
                     if (!events[game.released]) events[game.released] = [];
                     
+                    // JSON 내보내기용 객체에 "u" 필드(링크) 추가
                     const gameData = {
                         c: "game",
                         t: name,
-                        id: generateId()
+                        id: generateId(),
+                        u: gameLink
                     };
                     events[game.released].push(gameData);
                     
