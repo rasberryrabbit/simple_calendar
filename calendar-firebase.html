@@ -144,7 +144,7 @@ button.lk.has{opacity:1;border-color:var(--accent);color:var(--accent)}
   </div>
   <div class="scroll"><div class="grid" id="grid"></div></div>
   <div class="status" id="status"></div>
-  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v39)</div>
+  <div class="status" style="text-align:right;opacity:.7">버전: 출시일정 줄 표시 (v40)</div>
 </div>
 <div class="modal" id="modal"><div class="box">
   <h2 id="mtitle"></h2>
@@ -194,6 +194,7 @@ button.lk.has{opacity:1;border-color:var(--accent);color:var(--accent)}
     <span style="display:flex;gap:8px"><button id="lcancel" type="button">취소</button><button id="lok" class="pri" type="button">적용</button></span>
   </div>
   <div class="sub">적용한 뒤 날짜 창 아래의 <b>저장</b>을 눌러야 서버에 반영돼요.</div>
+  <div class="sub">제목이 비어 있으면 스팀 상점 주소(…/app/번호/이름/)에서 게임 이름을 채워요. 이름은 주소 기준이라 따옴표나 쌍점이 빠질 수 있어서 필요하면 직접 고쳐 주세요.</div>
 </div></div>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -238,6 +239,21 @@ function safeUrl(v){
     return u.href.length>300?"":u.href;
   }catch(e){return ""}
 }
+/* 스팀 상점 주소(…/app/번호/게임_이름/)에서 게임 이름을 읽어요. 스팀 서버는 브라우저에서 직접 조회할 수 없어서, 주소에 들어 있는 이름을 사용해요 */
+function steamInfo(u){
+  try{
+    const x=new URL(u);
+    if(x.hostname.toLowerCase()!=="store.steampowered.com")return {steam:false,name:""};
+    const m=x.pathname.match(/^\/(?:agecheck\/)?(?:app|sub|bundle)\/\d+(?:\/([^/]+))?/i);
+    if(!m)return {steam:true,name:""};
+    let slug=m[1]||"";
+    try{slug=decodeURIComponent(slug)}catch(e){}
+    const name=slug.replace(/_+/g," ").replace(/\s+/g," ").trim();
+    if(!name||/^\d+$/.test(name)||name.includes("%"))return {steam:true,name:""};
+    return {steam:true,name:name.slice(0,200)};
+  }catch(e){return {steam:false,name:""}}
+}
+const steamNameFromUrl=u=>steamInfo(u).name;
 const hostOf=u=>{try{return new URL(u).hostname.replace(/^www\./,"")}catch(e){return ""}};
 const rid=()=>Math.random().toString(36).slice(2,9);
 const pad=n=>String(n).padStart(2,"0");
@@ -362,14 +378,26 @@ function updateLinkBtn(btn,ev){
 }
 let linkTarget=null;
 function closeLink(){$("lmodal").classList.remove("on");linkTarget=null}
-function openLink(ev,btn){
-  linkTarget={ev,btn};
+function openLink(ev,btn,inp){
+  linkTarget={ev,btn,inp};
   $("ltitle").textContent=ev.t.trim()||"(제목 없음)";
   $("lurl").value=ev.u||"";
   $("lmsg").textContent="";
+  linkHint();
   $("lmodal").classList.add("on");
   setTimeout(()=>$("lurl").focus(),0);
 }
+function linkHint(){
+  if(!linkTarget)return;
+  const msg=$("lmsg");msg.textContent="";
+  if(linkTarget.ev.t.trim())return;
+  const u=safeUrl($("lurl").value.trim());
+  if(!u)return;
+  const si=steamInfo(u);
+  if(si.name)msg.textContent="게임 이름 \""+si.name+"\"을(를) 제목에 채울게요.";
+  else if(si.steam)msg.textContent="스팀 주소에 게임 이름이 없어요. …/app/번호/이름/ 형태의 주소를 쓰거나 제목을 직접 입력해 주세요.";
+}
+$("lurl").addEventListener("input",linkHint);
 function applyLink(){
   if(!linkTarget)return;
   const raw=$("lurl").value.trim();
@@ -378,6 +406,11 @@ function applyLink(){
     const u=safeUrl(raw);
     if(!u){$("lmsg").textContent="http:// 또는 https:// 주소를 300자 이내로 입력해 주세요.";return}
     linkTarget.ev.u=u;
+    /* 게임 이름이 비어 있고 스팀 상점 주소라면 주소에서 이름을 채워요 */
+    if(!linkTarget.ev.t.trim()){
+      const nm=steamNameFromUrl(u);
+      if(nm){linkTarget.ev.t=nm;if(linkTarget.inp)linkTarget.inp.value=nm}
+    }
   }
   updateLinkBtn(linkTarget.btn,linkTarget.ev);
   closeLink();
@@ -419,7 +452,7 @@ function drawBase(){
       const inp=document.createElement("input");inp.value=ev.t;inp.placeholder="출시 일정 내용";inp.oninput=()=>ev.t=inp.value;
       const x=document.createElement("button");x.textContent="✕";x.setAttribute("aria-label","삭제");x.onclick=()=>{baseWork.splice(i,1);drawBase()};
       const lb=document.createElement("button");lb.type="button";lb.className="lk";lb.setAttribute("aria-label","링크");
-      updateLinkBtn(lb,ev);lb.onclick=()=>openLink(ev,lb);
+      updateLinkBtn(lb,ev);lb.onclick=()=>openLink(ev,lb,inp);
       row.append(sel,inp,lb,x);
     }
     box.appendChild(row);
@@ -575,9 +608,12 @@ function cleanEvents(mk,ev,isBase){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||d.slice(0,7)!==mk||!Array.isArray(list))continue;
     const a=[];
     list.forEach(x=>{
-      if(!x||typeof x.t!=="string"||!x.t.trim())return;
-      const t=x.t.trim().slice(0,200);
+      if(!x)return;
       const su=isBase?safeUrl(x.u):"";
+      let t=typeof x.t==="string"?x.t.trim():"";
+      if(!t&&su)t=steamNameFromUrl(su);
+      if(!t)return;
+      t=t.slice(0,200);
       a.push({id:(typeof x.id==="string"&&x.id)?x.id.slice(0,20):rid(),t,c:isBase?(BTYPES[x.c]?x.c:"event"):kind(t,x.c),...(su?{u:su}:{})});
     });
     if(a.length){out[d]=a;n+=a.length}
